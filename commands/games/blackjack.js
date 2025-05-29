@@ -82,6 +82,47 @@ module.exports = {
     let playerValue = handValue(playerHand);
     let dealerValue = handValue([dealerHand[0]]); // Only show one card
 
+    // Insurance logic (stake.com): Offer if dealer shows Ace
+    let insuranceOffered = false;
+    let insuranceTaken = false;
+    let insurancePayout = 0;
+    if (dealerHand[0].rank === "A") {
+      insuranceOffered = true;
+      // Offer insurance button
+      const insuranceRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("insurance_yes").setLabel("Take Insurance").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("insurance_no").setLabel("No Insurance").setStyle(ButtonStyle.Secondary)
+      );
+      embed.addFields({ name: "Insurance", value: "Dealer shows an Ace! Take insurance for half your bet? (Pays 2:1 if dealer has blackjack)", inline: false });
+      await interaction.editReply({ embeds: [embed], components: [row, insuranceRow], content: null });
+      // Wait for insurance choice
+      let insuranceCollector = interaction.channel.createMessageComponentCollector({
+        filter: i => i.user.id === interaction.user.id && ["insurance_yes", "insurance_no"].includes(i.customId),
+        time: 20000
+      });
+      await new Promise(res => {
+        insuranceCollector.on("collect", async i => {
+          if (i.customId === "insurance_yes") {
+            if (user.balance < Math.floor(amount / 2)) {
+              await i.reply({ content: "❌ Not enough balance for insurance.", ephemeral: true });
+              insuranceTaken = false;
+            } else {
+              user.balance -= Math.floor(amount / 2);
+              await user.save();
+              insuranceTaken = true;
+              await i.update({ content: "✅ Insurance taken!", embeds: [embed], components: [row, insuranceRow] });
+            }
+          } else {
+            insuranceTaken = false;
+            await i.update({ content: "No insurance taken.", embeds: [embed], components: [row, insuranceRow] });
+          }
+          insuranceCollector.stop();
+        });
+        insuranceCollector.on("end", res);
+      });
+      // Remove insurance row for next UI
+      embed.data.fields = embed.data.fields.filter(f => f.name !== "Insurance");
+    }
     // Check for auto-win (blackjack)
     let finished = false;
     let win = false;
@@ -95,10 +136,17 @@ module.exports = {
         // Both have blackjack: push
         win = null;
         payout = 0;
+        if (insuranceTaken) {
+          insurancePayout = amount;
+          user.balance += insurancePayout;
+        }
       } else {
         // Player wins with blackjack, 2.5x payout (house edge applied)
         win = true;
         payout = Math.floor(amount * 2.37); // 2.5x - 5% house edge
+        if (insuranceTaken) {
+          insurancePayout = 0;
+        }
       }
       finished = true;
     }
@@ -127,7 +175,7 @@ module.exports = {
         amount,
         result: win === true ? "win" : win === false ? "lose" : "draw",
         payout: payout,
-        details: { playerHand, dealerHand, autoBlackjack: true },
+        details: { playerHand, dealerHand, autoBlackjack: true, insurance: insuranceTaken, insurancePayout },
       });
       // Final embed
       let resultField;
@@ -142,35 +190,91 @@ module.exports = {
           { name: win === true ? "Blackjack! You Win!" : win === false ? "Both Blackjack! Draw" : "Draw", value: resultField, inline: false },
           { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
           { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
-        )
-        .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
+        );
+      if (insuranceTaken) {
+        embed.addFields({ name: "Insurance", value: insurancePayout > 0 ? `You won insurance: **+${insurancePayout} ${currency}**` : "Insurance lost.", inline: false });
+      }
+      embed.setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
       await interaction.editReply({ embeds: [embed], components: [], content: null });
       return;
     }
 
     // Show initial hand with buttons
     const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+    let canSplit = playerHand[0].rank === playerHand[1].rank;
     let embed = new EmbedBuilder()
       .setTitle("🃏 Blackjack")
       .setDescription(`Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${playerValue})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`)
       .setColor(0x5865f2)
       .addFields(
-        { name: "How to Play", value: "Press **Hit** to draw a card, or **Stand** to hold.", inline: false },
+        { name: "How to Play", value: "Press **Hit** to draw a card, **Stand** to hold, or **Split** if you have a pair.", inline: false },
         { name: "Your Bet", value: `${amount} ${currency}`, inline: false }
       )
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("hit").setLabel("Hit").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("split").setLabel("Split").setStyle(ButtonStyle.Success).setDisabled(!canSplit)
     );
     await interaction.editReply({ embeds: [embed], components: [row], content: null });
 
-    // Await user interaction for hit/stand
+    // Await user interaction for hit/stand/split
+    let splitActive = false;
+    let splitHands = [];
+    let splitBets = [];
+    let splitResults = [];
+    let splitIndex = 0;
     let collector = interaction.channel.createMessageComponentCollector({
-      filter: i => i.user.id === interaction.user.id && ["hit", "stand"].includes(i.customId),
+      filter: i => i.user.id === interaction.user.id && ["hit", "stand", "split"].includes(i.customId),
       time: 30000
     });
     collector.on("collect", async i => {
+      if (i.customId === "split" && canSplit && !splitActive) {
+        // Split logic: create two hands, deduct extra bet
+        if (user.balance < amount) {
+          await i.reply({ content: "❌ Not enough balance to split.", ephemeral: true });
+          return;
+        }
+        user.balance -= amount;
+        await user.save();
+        splitActive = true;
+        splitHands = [
+          [playerHand[0], drawCard()],
+          [playerHand[1], drawCard()]
+        ];
+        splitBets = [amount, amount];
+        splitResults = [null, null];
+        splitIndex = 0;
+        embed.setDescription(`Split! Playing hand 1: ${splitHands[0].map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(splitHands[0])})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`);
+        await i.update({ embeds: [embed], components: [row] });
+        return;
+      }
+      if (splitActive) {
+        // Play out split hands one by one
+        let hand = splitHands[splitIndex];
+        if (i.customId === "hit") {
+          hand.push(drawCard());
+          embed.setDescription(`Split! Playing hand ${splitIndex + 1}: ${hand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(hand)})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`);
+          await i.update({ embeds: [embed], components: [row] });
+          if (handValue(hand) > 21) {
+            splitResults[splitIndex] = "bust";
+            splitIndex++;
+          }
+        } else if (i.customId === "stand") {
+          splitResults[splitIndex] = "stand";
+          splitIndex++;
+        }
+        // Move to next hand or finish
+        if (splitIndex >= splitHands.length) {
+          collector.stop("splitdone");
+        } else if (splitResults[splitIndex]) {
+          // If next hand already finished (e.g. both bust), skip
+          splitIndex++;
+          if (splitIndex >= splitHands.length) collector.stop("splitdone");
+        }
+        return;
+      }
+      // Normal (non-split) play
       if (i.customId === "hit") {
         playerHand.push(drawCard());
         playerValue = handValue(playerHand);
@@ -190,14 +294,89 @@ module.exports = {
     // Disable buttons after game ends
     const disabledRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("hit").setLabel("Hit").setStyle(ButtonStyle.Primary).setDisabled(true),
-      new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary).setDisabled(true)
+      new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId("split").setLabel("Split").setStyle(ButtonStyle.Success).setDisabled(true)
     );
+
     // Dealer's turn
     dealerValue = handValue(dealerHand);
-    while (!playerBusted && dealerValue < 17) {
+    while ((!playerBusted && !splitActive) && dealerValue < 17) {
       dealerHand.push(drawCard());
       dealerValue = handValue(dealerHand);
     }
+    // Result logic
+    if (splitActive) {
+      // For each split hand, resolve result
+      let splitPayouts = [0, 0];
+      let splitWin = [false, false];
+      for (let idx = 0; idx < splitHands.length; idx++) {
+        let hand = splitHands[idx];
+        let value = handValue(hand);
+        let result = splitResults[idx];
+        if (result === "bust" || value > 21) {
+          splitWin[idx] = false;
+          splitPayouts[idx] = -amount;
+        } else {
+          // Dealer draws for split hands
+          let dealerVal = handValue(dealerHand);
+          if (dealerVal > 21 || value > dealerVal) {
+            splitWin[idx] = true;
+            splitPayouts[idx] = Math.floor(amount * 1.95);
+            user.balance += splitPayouts[idx];
+          } else if (value === dealerVal) {
+            splitWin[idx] = null;
+            splitPayouts[idx] = 0;
+          } else {
+            splitWin[idx] = false;
+            splitPayouts[idx] = -amount;
+          }
+        }
+      }
+      // XP for split
+      let xpGain = 10;
+      for (let idx = 0; idx < splitHands.length; idx++) {
+        if (splitWin[idx] === true) user.xp += xpGain * 2;
+        else if (splitWin[idx] === false) user.xp += xpGain;
+      }
+      // Level up logic
+      const nextLevelXp = user.level * 100;
+      let resultText = "";
+      if (user.xp >= nextLevelXp) {
+        user.level += 1;
+        user.xp = user.xp - nextLevelXp;
+        resultText += `\n🎉 You leveled up to **Level ${user.level}**!`;
+      }
+      await user.save();
+      // Bet history for both hands
+      const Bet = require("../../models/Bet");
+      for (let idx = 0; idx < splitHands.length; idx++) {
+        await Bet.create({
+          userId,
+          game: "blackjack",
+          amount,
+          result: splitWin[idx] === true ? "win" : splitWin[idx] === false ? "lose" : "draw",
+          payout: splitPayouts[idx],
+          details: { playerHand: splitHands[idx], dealerHand, split: true, handIndex: idx },
+        });
+      }
+      // Final embed for split
+      let splitDesc = splitHands.map((hand, idx) =>
+        `Hand ${idx + 1}: ${hand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(hand)}) - ` +
+        (splitWin[idx] === true ? `**+${Math.abs(splitPayouts[idx])} ${currency}**` : splitWin[idx] === false ? `**-${amount} ${currency}**` : "No change (draw)")
+      ).join("\n");
+      let embed = new EmbedBuilder()
+        .setTitle("🃏 Blackjack (Split)")
+        .setColor(0x5865f2)
+        .setDescription(`${splitDesc}\nDealer's hand: ${dealerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(dealerHand)})`)
+        .addFields(
+          { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
+          { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
+        )
+        .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
+      await interaction.editReply({ embeds: [embed], components: [disabledRow], content: null });
+      return;
+    }
+
     // Determine result
     if (playerValue > 21) {
       win = false;
