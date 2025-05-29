@@ -61,6 +61,10 @@ module.exports = {
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
     }
+    // Deduct initial bet immediately to prevent mid-game quitting exploits
+    user.balance -= amount;
+    if (user.balance < 0) user.balance = 0;
+    await user.save();
     // Cooldown (20s)
     const cd = checkCooldown(userId, "dragontower", 20);
     if (cd > 0) {
@@ -83,9 +87,6 @@ module.exports = {
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Entering the Dragon Tower...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
-    // Deduct bet up front
-    user.balance -= amount;
-    await user.save();
     // Game state
     let tower = generateTower(height, width);
     let currentLevel = 0;

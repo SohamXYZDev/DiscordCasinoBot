@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const User = require("../../models/User");
 const GuildConfig = require("../../models/GuildConfig");
 const { checkCooldown } = require("../../utils/cooldown");
@@ -32,6 +32,24 @@ function handValue(hand) {
   return value;
 }
 
+// Helper function to create and shuffle a deck
+function createShuffledDeck() {
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+  const suits = ["♠", "♥", "♦", "♣"];
+  const deck = [];
+  for (const suit of suits) {
+    for (const rank of ranks) {
+      deck.push({ rank, suit });
+    }
+  }
+  // Shuffle
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("blackjack")
@@ -54,6 +72,10 @@ module.exports = {
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
     }
+    // Deduct initial bet immediately to prevent mid-game quitting exploits
+    user.balance -= amount;
+    if (user.balance < 0) user.balance = 0;
+    await user.save();
     // Cooldown (20s)
     const cd = checkCooldown(userId, "blackjack", 20);
     if (cd > 0) {
@@ -74,11 +96,13 @@ module.exports = {
       }
     }
     // Anticipation message with loading gif
-    await interaction.reply({ content: "<a:loading:1376139232090914846> Dealing cards...", ephemeral: false });
+    await interaction.reply({ content: "<a:loading:1376139232090914846> Dealing cards..."});
     await new Promise(res => setTimeout(res, 1500));
-    // Initial hands
-    let playerHand = [drawCard(), drawCard()];
-    let dealerHand = [drawCard(), drawCard()];
+    // Initial hands (finite deck)
+    let deck = createShuffledDeck();
+    function drawFromDeck() { return deck.pop(); }
+    let playerHand = [drawFromDeck(), drawFromDeck()];
+    let dealerHand = [drawFromDeck(), drawFromDeck()];
     let playerValue = handValue(playerHand);
     let dealerValue = handValue([dealerHand[0]]); // Only show one card
 
@@ -138,12 +162,12 @@ module.exports = {
         payout = 0;
         if (insuranceTaken) {
           insurancePayout = amount;
-          user.balance += insurancePayout;
+          user.balance += insurancePayout * 2; // Insurance pays 2:1
         }
       } else {
-        // Player wins with blackjack, 2.5x payout (house edge applied)
+        // Player wins with blackjack, 3:2 payout (house edge applied)
         win = true;
-        payout = Math.floor(amount * 2.37); // 2.5x - 5% house edge
+        payout = Math.floor(amount * 1.425); // 1.5x (3:2) - 5% house edge
         if (insuranceTaken) {
           insurancePayout = 0;
         }
@@ -200,47 +224,74 @@ module.exports = {
     }
 
     // Show initial hand with buttons
-    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
     let canSplit = playerHand[0].rank === playerHand[1].rank;
+    let canDouble = user.balance >= amount && playerHand.length === 2;
+    // --- Add split state variables here ---
+    let splitActive = false;
+    let splitHands = null;
+    let splitBets = null;
+    let splitResults = null;
+    let splitIndex = 0;
+    // --- End split state vars ---
     let embed = new EmbedBuilder()
       .setTitle("🃏 Blackjack")
       .setDescription(`Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${playerValue})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`)
       .setColor(0x5865f2)
       .addFields(
-        { name: "How to Play", value: "Press **Hit** to draw a card, **Stand** to hold, or **Split** if you have a pair.", inline: false },
+        { name: "How to Play", value: "Press **Hit** to draw a card, **Stand** to hold, **Double Down** to double your bet and draw one card, or **Split** if you have a pair.", inline: false },
         { name: "Your Bet", value: `${amount} ${currency}`, inline: false }
       )
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("hit").setLabel("Hit").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("double").setLabel("Double Down").setStyle(ButtonStyle.Danger).setDisabled(!canDouble),
       new ButtonBuilder().setCustomId("split").setLabel("Split").setStyle(ButtonStyle.Success).setDisabled(!canSplit)
     );
     await interaction.editReply({ embeds: [embed], components: [row], content: null });
 
-    // Await user interaction for hit/stand/split
-    let splitActive = false;
-    let splitHands = [];
-    let splitBets = [];
-    let splitResults = [];
-    let splitIndex = 0;
-    let collector = interaction.channel.createMessageComponentCollector({
-      filter: i => i.user.id === interaction.user.id && ["hit", "stand", "split"].includes(i.customId),
+    // Await user interaction for hit/stand/double/split
+    let doubleDown = false;
+    collector = interaction.channel.createMessageComponentCollector({
+      filter: i => i.user.id === interaction.user.id && ["hit", "stand", "double", "split"].includes(i.customId),
       time: 30000
     });
     collector.on("collect", async i => {
+      // Always check if user can afford double down at the moment of click
+      if (i.customId === "double" && !splitActive && playerHand.length === 2) {
+        // Fetch latest user balance from DB to prevent exploits
+        const freshUser = await User.findOne({ userId });
+        if (!freshUser || freshUser.balance < amount) {
+          await i.reply({ content: "❌ Not enough balance to double down.", ephemeral: true });
+          return;
+        }
+        doubleDown = true;
+        freshUser.balance -= amount;
+        if (freshUser.balance < 0) freshUser.balance = 0;
+        await freshUser.save();
+        user.balance = freshUser.balance; // keep in-memory value in sync
+        playerHand.push(drawFromDeck());
+        playerValue = handValue(playerHand);
+        embed.setDescription(`You doubled down! Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${playerValue})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`);
+        await i.update({ embeds: [embed], components: [row] });
+        finished = true;
+        collector.stop("double");
+        return;
+      }
       if (i.customId === "split" && canSplit && !splitActive) {
-        // Split logic: create two hands, deduct extra bet
-        if (user.balance < amount) {
+        // Fetch latest user balance from DB to prevent exploits
+        const freshUser = await User.findOne({ userId });
+        if (!freshUser || freshUser.balance < amount) {
           await i.reply({ content: "❌ Not enough balance to split.", ephemeral: true });
           return;
         }
-        user.balance -= amount;
-        await user.save();
+        freshUser.balance -= amount;
+        await freshUser.save();
+        user.balance = freshUser.balance; // keep in-memory value in sync
         splitActive = true;
         splitHands = [
-          [playerHand[0], drawCard()],
-          [playerHand[1], drawCard()]
+          [playerHand[0], drawFromDeck()],
+          [playerHand[1], drawFromDeck()]
         ];
         splitBets = [amount, amount];
         splitResults = [null, null];
@@ -253,7 +304,7 @@ module.exports = {
         // Play out split hands one by one
         let hand = splitHands[splitIndex];
         if (i.customId === "hit") {
-          hand.push(drawCard());
+          hand.push(drawFromDeck());
           embed.setDescription(`Split! Playing hand ${splitIndex + 1}: ${hand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(hand)})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`);
           await i.update({ embeds: [embed], components: [row] });
           if (handValue(hand) > 21) {
@@ -276,7 +327,7 @@ module.exports = {
       }
       // Normal (non-split) play
       if (i.customId === "hit") {
-        playerHand.push(drawCard());
+        playerHand.push(drawFromDeck());
         playerValue = handValue(playerHand);
         embed.setDescription(`Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${playerValue})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`);
         await i.update({ embeds: [embed], components: [row] });
@@ -295,105 +346,34 @@ module.exports = {
     const disabledRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("hit").setLabel("Hit").setStyle(ButtonStyle.Primary).setDisabled(true),
       new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId("double").setLabel("Double Down").setStyle(ButtonStyle.Danger).setDisabled(true),
       new ButtonBuilder().setCustomId("split").setLabel("Split").setStyle(ButtonStyle.Success).setDisabled(true)
     );
 
     // Dealer's turn
     dealerValue = handValue(dealerHand);
     while ((!playerBusted && !splitActive) && dealerValue < 17) {
-      dealerHand.push(drawCard());
+      dealerHand.push(drawFromDeck());
       dealerValue = handValue(dealerHand);
     }
-    // Result logic
-    if (splitActive) {
-      // For each split hand, resolve result
-      let splitPayouts = [0, 0];
-      let splitWin = [false, false];
-      for (let idx = 0; idx < splitHands.length; idx++) {
-        let hand = splitHands[idx];
-        let value = handValue(hand);
-        let result = splitResults[idx];
-        if (result === "bust" || value > 21) {
-          splitWin[idx] = false;
-          splitPayouts[idx] = -amount;
-        } else {
-          // Dealer draws for split hands
-          let dealerVal = handValue(dealerHand);
-          if (dealerVal > 21 || value > dealerVal) {
-            splitWin[idx] = true;
-            splitPayouts[idx] = Math.floor(amount * 1.95);
-            user.balance += splitPayouts[idx];
-          } else if (value === dealerVal) {
-            splitWin[idx] = null;
-            splitPayouts[idx] = 0;
-          } else {
-            splitWin[idx] = false;
-            splitPayouts[idx] = -amount;
-          }
-        }
-      }
-      // XP for split
-      let xpGain = 10;
-      for (let idx = 0; idx < splitHands.length; idx++) {
-        if (splitWin[idx] === true) user.xp += xpGain * 2;
-        else if (splitWin[idx] === false) user.xp += xpGain;
-      }
-      // Level up logic
-      const nextLevelXp = user.level * 100;
-      let resultText = "";
-      if (user.xp >= nextLevelXp) {
-        user.level += 1;
-        user.xp = user.xp - nextLevelXp;
-        resultText += `\n🎉 You leveled up to **Level ${user.level}**!`;
-      }
-      await user.save();
-      // Bet history for both hands
-      const Bet = require("../../models/Bet");
-      for (let idx = 0; idx < splitHands.length; idx++) {
-        await Bet.create({
-          userId,
-          game: "blackjack",
-          amount,
-          result: splitWin[idx] === true ? "win" : splitWin[idx] === false ? "lose" : "draw",
-          payout: splitPayouts[idx],
-          details: { playerHand: splitHands[idx], dealerHand, split: true, handIndex: idx },
-        });
-      }
-      // Final embed for split
-      let splitDesc = splitHands.map((hand, idx) =>
-        `Hand ${idx + 1}: ${hand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(hand)}) - ` +
-        (splitWin[idx] === true ? `**+${Math.abs(splitPayouts[idx])} ${currency}**` : splitWin[idx] === false ? `**-${amount} ${currency}**` : "No change (draw)")
-      ).join("\n");
-      let embed = new EmbedBuilder()
-        .setTitle("🃏 Blackjack (Split)")
-        .setColor(0x5865f2)
-        .setDescription(`${splitDesc}\nDealer's hand: ${dealerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(dealerHand)})`)
-        .addFields(
-          { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
-          { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
-        )
-        .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
-      await interaction.editReply({ embeds: [embed], components: [disabledRow], content: null });
-      return;
-    }
-
-    // Determine result
+    // Result logic (after dealer's turn)
+    let betForResult = doubleDown ? amount * 2 : amount;
     if (playerValue > 21) {
       win = false;
-      payout = -amount;
+      payout = -betForResult;
     } else if (dealerValue > 21 || playerValue > dealerValue) {
       win = true;
-      // House edge: 5% reduction
-      payout = Math.floor(amount * 1.95);
+      payout = Math.floor(betForResult * 0.95); // 1:1 payout minus 5% house edge for double down
     } else if (playerValue === dealerValue) {
       win = null;
       payout = 0;
     } else {
       win = false;
-      payout = -amount;
+      payout = -betForResult;
     }
     if (win === true) user.balance += payout;
-    else if (win === false) user.balance -= amount;
+    else if (win === false) user.balance -= betForResult;
+    if (user.balance < 0) user.balance = 0;
     // XP
     let xpGain = 10;
     if (win === true) user.xp += xpGain * 2;
@@ -432,6 +412,9 @@ module.exports = {
         { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
       )
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
+    if (doubleDown) {
+      embed.addFields({ name: "Double Down", value: `You doubled your bet to **${betForResult} ${currency}**.`, inline: false });
+    }
     await interaction.editReply({ embeds: [embed], components: [disabledRow], content: null });
   },
 };
