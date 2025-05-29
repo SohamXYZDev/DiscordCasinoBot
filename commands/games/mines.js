@@ -135,9 +135,10 @@ module.exports = {
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
     // Add cash out button as a separate row (always, since 4x4 = 4 rows max)
     let components = getBoardRows();
-    const cashRow = new ActionRowBuilder();
+    let currentMultiplier = getMultiplier(steps, mines);
+    let cashRow = new ActionRowBuilder();
     cashRow.addComponents(
-      new ButtonBuilder().setCustomId("mines_cashout").setLabel("💰 Cash Out").setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId("mines_cashout").setLabel(`💰 Cash Out (${currentMultiplier}x)`).setStyle(ButtonStyle.Primary)
     );
     components.push(cashRow);
     await interaction.editReply({ embeds: [embed], components, content: null });
@@ -169,7 +170,12 @@ module.exports = {
       }
       // Update board
       let updateComponents = getBoardRows();
-      updateComponents.push(cashRow);
+      let updateMultiplier = getMultiplier(steps, mines);
+      let updateCashRow = new ActionRowBuilder();
+      updateCashRow.addComponents(
+        new ButtonBuilder().setCustomId("mines_cashout").setLabel(`💰 Cash Out (${updateMultiplier}x)`).setStyle(ButtonStyle.Primary)
+      );
+      updateComponents.push(updateCashRow);
       await i.update({ embeds: [embed], components: updateComponents });
     });
     await new Promise(res => collector.once("end", res));

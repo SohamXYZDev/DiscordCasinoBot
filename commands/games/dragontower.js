@@ -4,24 +4,36 @@ const GuildConfig = require("../../models/GuildConfig");
 const { checkCooldown } = require("../../utils/cooldown");
 
 // Helper to generate a random path of safe/unsafe for the tower
-function generateTower(height, width, dragons) {
-  // Each row has one dragon, rest are safe
+function generateTower(height, width, dragonsPerRow) {
+  // Each row has n unique dragons, rest are safe
   const tower = [];
   for (let y = 0; y < height; y++) {
     const row = Array(width).fill(false);
-    const dragonIdx = Math.floor(Math.random() * width);
-    row[dragonIdx] = true;
+    let dragonIndices = [];
+    while (dragonIndices.length < dragonsPerRow) {
+      let idx = Math.floor(Math.random() * width);
+      if (!dragonIndices.includes(idx)) dragonIndices.push(idx);
+    }
+    for (const idx of dragonIndices) row[idx] = true;
     tower.push(row);
   }
   return tower;
 }
 
-function getMultiplierDragon(level, width) {
-  // Multiplier increases with each level climbed
-  // Example: 1.5x for first, up to ~10x for top
-  const base = 1.3 + (width * 0.1);
+function getMultiplierDragon(level, width, dragonsPerRow) {
+  // Multiplier increases with each level climbed, more dragons = higher risk = higher reward
+  // Example: 1.5x for first, up to ~10x for top, scale with dragons
+  const base = 1.3 + (width * 0.1) + (dragonsPerRow - 1) * 0.2;
   return parseFloat((base ** level).toFixed(2));
 }
+
+const DIFFICULTY_SETTINGS = {
+  easy:   { height: 9, width: 4, dragons: 1, label: 'Easy' },
+  medium: { height: 9, width: 3, dragons: 1, label: 'Medium' },
+  hard:   { height: 9, width: 2, dragons: 1, label: 'Hard' },
+  expert: { height: 9, width: 3, dragons: 2, label: 'Expert' },
+  master: { height: 9, width: 4, dragons: 3, label: 'Master' },
+};
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -32,25 +44,26 @@ module.exports = {
         .setDescription("How many coins to bet")
         .setRequired(true)
     )
-    .addIntegerOption(option =>
-      option.setName("width")
-        .setDescription("How many tiles per row? (3-5 recommended)")
+    .addStringOption(option =>
+      option.setName("difficulty")
+        .setDescription("Choose a difficulty mode")
         .setRequired(true)
-        .setMinValue(3)
-        .setMaxValue(7)
-    )
-    .addIntegerOption(option =>
-      option.setName("height")
-        .setDescription("How many floors? (5-10 recommended)")
-        .setRequired(true)
-        .setMinValue(3)
-        .setMaxValue(15)
+        .addChoices(
+          { name: "Easy", value: "easy" },
+          { name: "Medium", value: "medium" },
+          { name: "Hard", value: "hard" },
+          { name: "Expert", value: "expert" },
+          { name: "Master", value: "master" }
+        )
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
     const amount = interaction.options.getInteger("amount");
-    const width = interaction.options.getInteger("width");
-    const height = interaction.options.getInteger("height");
+    const difficulty = interaction.options.getString("difficulty");
+    const settings = DIFFICULTY_SETTINGS[difficulty];
+    const width = settings.width;
+    const height = settings.height;
+    const dragonsPerRow = settings.dragons;
     if (amount <= 0) {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
     }
@@ -85,10 +98,10 @@ module.exports = {
       }
     }
     // Anticipation message
-    await interaction.reply({ content: "<a:loading:1376139232090914846> Entering the Dragon Tower...", ephemeral: false });
+    await interaction.reply({ content: `<a:loading:1376139232090914846> Entering the Dragon Tower... (Difficulty: ${settings.label})`, ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
     // Game state
-    let tower = generateTower(height, width);
+    let tower = generateTower(height, width, dragonsPerRow);
     let currentLevel = 0;
     let finished = false;
     let win = false;
@@ -100,9 +113,17 @@ module.exports = {
       for (let x = 0; x < width; x++) {
         let label = reveal && tower[currentLevel] && tower[currentLevel][x] ? "🐉" : "⬛";
         let style = reveal && tower[currentLevel] && tower[currentLevel][x] ? ButtonStyle.Danger : ButtonStyle.Secondary;
+        // If this is the picked tile on this floor
         if (path[currentLevel] === x) {
-          label = "🟩";
-          style = ButtonStyle.Success;
+          if (tower[currentLevel][x]) {
+            // Picked a dragon, show red
+            label = "🐉";
+            style = ButtonStyle.Danger;
+          } else {
+            // Picked a safe tile, show green
+            label = "🟩";
+            style = ButtonStyle.Success;
+          }
         }
         row.addComponents(
           new ButtonBuilder()
@@ -117,17 +138,19 @@ module.exports = {
     // Initial embed
     let embed = new EmbedBuilder()
       .setTitle("🐉 Dragon Tower")
-      .setDescription(`Climb the tower! Pick a safe tile on each floor. Press **Cash Out** to claim your winnings.`)
+      .setDescription(`Climb the tower! Pick a safe tile on each floor. Press **Cash Out** to claim your winnings.\n**Difficulty:** ${settings.label}`)
       .addFields(
         { name: "Bet", value: `${amount} ${currency}`, inline: true },
         { name: "Floors", value: `${height}`, inline: true },
         { name: "Tiles per Floor", value: `${width}`, inline: true },
+        { name: "Dragons per Floor", value: `${dragonsPerRow}`, inline: true },
         { name: "Current Floor", value: `${currentLevel + 1} / ${height}`, inline: true },
         { name: "Safe Picks", value: `${currentLevel}`, inline: true }
       )
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
-    const cashRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("dtower_cashout").setLabel("💰 Cash Out").setStyle(ButtonStyle.Primary)
+    let currentMultiplier = getMultiplierDragon(currentLevel, width, dragonsPerRow);
+    let cashRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("dtower_cashout").setLabel(`💰 Cash Out (${currentMultiplier}x)`).setStyle(ButtonStyle.Primary)
     );
     await interaction.editReply({ embeds: [embed], components: [...getRowButtons(), cashRow], content: null });
     // Collector for game
@@ -137,7 +160,7 @@ module.exports = {
       if (i.customId === "dtower_cashout") {
         finished = true;
         win = true;
-        payout = Math.floor(amount * getMultiplierDragon(currentLevel, width) * 0.95); // 5% house edge
+        payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * 0.95); // 5% house edge
         user.balance += payout;
         await user.save();
         collector.stop("cashout");
@@ -157,7 +180,7 @@ module.exports = {
           // Reached the top!
           finished = true;
           win = true;
-          payout = Math.floor(amount * getMultiplierDragon(currentLevel, width) * 0.95);
+          payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * 0.95);
           user.balance += payout;
           await user.save();
           collector.stop("top");
@@ -169,10 +192,15 @@ module.exports = {
         { name: "Bet", value: `${amount} ${currency}`, inline: true },
         { name: "Floors", value: `${height}`, inline: true },
         { name: "Tiles per Floor", value: `${width}`, inline: true },
+        { name: "Dragons per Floor", value: `${dragonsPerRow}`, inline: true },
         { name: "Current Floor", value: `${currentLevel + 1} / ${height}`, inline: true },
         { name: "Safe Picks", value: `${currentLevel}`, inline: true }
       );
-      await i.update({ embeds: [embed], components: [...getRowButtons(), cashRow] });
+      let updateMultiplier = getMultiplierDragon(currentLevel, width, dragonsPerRow);
+      let updateCashRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("dtower_cashout").setLabel(`💰 Cash Out (${updateMultiplier}x)`).setStyle(ButtonStyle.Primary)
+      );
+      await i.update({ embeds: [embed], components: [...getRowButtons(), updateCashRow] });
     });
     await new Promise(res => collector.once("end", res));
     // Disable all buttons and reveal dragons on current row
@@ -198,20 +226,21 @@ module.exports = {
       amount,
       result: win ? "win" : "lose",
       payout: win ? payout : -amount,
-      details: { path, win, height, width, tower },
+      details: { path, win, height, width, dragonsPerRow, tower, difficulty: settings.label },
     });
     // Final embed
     embed = new EmbedBuilder()
       .setTitle("🐉 Dragon Tower")
       .setDescription(
         win
-          ? `You cashed out after ${currentLevel} floors!`
-          : `You hit a dragon on floor ${currentLevel + 1}!`
+          ? `You cashed out after ${currentLevel} floors! (Difficulty: ${settings.label})`
+          : `You hit a dragon on floor ${currentLevel + 1}! (Difficulty: ${settings.label})`
       )
       .addFields(
         { name: win ? "You Won!" : "You Lost", value: win ? `**+${payout} ${currency}**` : `**-${amount} ${currency}**`, inline: false },
         { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
-        { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
+        { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false },
+        { name: "Dragons per Floor", value: `${dragonsPerRow}`, inline: false }
       )
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
     await interaction.editReply({ embeds: [embed], components: disabledRows, content: null });
