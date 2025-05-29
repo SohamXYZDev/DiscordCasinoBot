@@ -81,6 +81,73 @@ module.exports = {
     let dealerHand = [drawCard(), drawCard()];
     let playerValue = handValue(playerHand);
     let dealerValue = handValue([dealerHand[0]]); // Only show one card
+
+    // Check for auto-win (blackjack)
+    let finished = false;
+    let win = false;
+    let payout = 0;
+    let playerBusted = false;
+    if (playerValue === 21) {
+      // Player has blackjack
+      // Dealer checks for blackjack
+      const dealerFullValue = handValue(dealerHand);
+      if (dealerFullValue === 21) {
+        // Both have blackjack: push
+        win = null;
+        payout = 0;
+      } else {
+        // Player wins with blackjack, 2.5x payout (house edge applied)
+        win = true;
+        payout = Math.floor(amount * 2.37); // 2.5x - 5% house edge
+      }
+      finished = true;
+    }
+
+    if (finished) {
+      if (win === true) user.balance += payout;
+      else if (win === false) user.balance -= amount;
+      // XP
+      let xpGain = 10;
+      if (win === true) user.xp += xpGain * 2;
+      else if (win === false) user.xp += xpGain;
+      // Level up logic
+      const nextLevelXp = user.level * 100;
+      let resultText = "";
+      if (user.xp >= nextLevelXp) {
+        user.level += 1;
+        user.xp = user.xp - nextLevelXp;
+        resultText += `\n🎉 You leveled up to **Level ${user.level}**!`;
+      }
+      await user.save();
+      // Bet history
+      const Bet = require("../../models/Bet");
+      await Bet.create({
+        userId,
+        game: "blackjack",
+        amount,
+        result: win === true ? "win" : win === false ? "lose" : "draw",
+        payout: payout,
+        details: { playerHand, dealerHand, autoBlackjack: true },
+      });
+      // Final embed
+      let resultField;
+      if (win === true) resultField = `**+${payout} ${currency}**`;
+      else if (win === false) resultField = `**-${amount} ${currency}**`;
+      else resultField = "No change (draw)";
+      let embed = new EmbedBuilder()
+        .setTitle("🃏 Blackjack")
+        .setColor(win === true ? 0x00ff99 : win === false ? 0xff0000 : 0xffff00)
+        .setDescription(`Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(playerHand)})\nDealer's hand: ${dealerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(dealerHand)})`)
+        .addFields(
+          { name: win === true ? "Blackjack! You Win!" : win === false ? "Both Blackjack! Draw" : "Draw", value: resultField, inline: false },
+          { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
+          { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
+        )
+        .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
+      await interaction.editReply({ embeds: [embed], components: [], content: null });
+      return;
+    }
+
     // Show initial hand with buttons
     const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
     let embed = new EmbedBuilder()
@@ -99,10 +166,6 @@ module.exports = {
     await interaction.editReply({ embeds: [embed], components: [row], content: null });
 
     // Await user interaction for hit/stand
-    let finished = false;
-    let win = false;
-    let payout = 0;
-    let playerBusted = false;
     let collector = interaction.channel.createMessageComponentCollector({
       filter: i => i.user.id === interaction.user.id && ["hit", "stand"].includes(i.customId),
       time: 30000
