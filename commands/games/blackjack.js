@@ -50,6 +50,68 @@ function createShuffledDeck() {
   return deck;
 }
 
+// Add a dictionary for custom Discord emojis
+const customEmojis = {
+  "A♠": "<:spades1:1379814832873803787>",
+  "2♠": "<:spades2:1379814835516346399>",
+  "3♠": "<:spades3:1379814839052140586>",
+  "4♠": "<:spades4:1379814842415845559>",
+  "5♠": "<:spades5:1379814845012250694>",
+  "6♠": "<:spades6:1379814847306399927>",
+  "7♠": "<:spades7:1379814850099941416>",
+  "8♠": "<:spades8:1379814853002399774>",
+  "9♠": "<:spades9:1379814856458244247>",
+  "10♠": "<:spades10:1379814859507630091>",
+  "J♠": "<:spadesj:1379814862045315133>",
+  "Q♠": "<:spadesq:1379814989388578967>",
+  "K♠": "<:spadesk:1379814864796516412>",
+  "A♥": "<:hearts1:1379815423511363667>",
+  "2♥": "<:hearts2:1379815426061762570>",
+  "3♥": "<:hearts3:1379815428695658536>",
+  "4♥": "<:hearts4:1379815431405178922>",
+  "5♥": "<:hearts5:1379815435196829828>",
+  "6♥": "<:hearts6:1379815438245957723>",
+  "7♥": "<:hearts7:1379815440359886860>",
+  "8♥": "<:hearts8:1379815442763223120>",
+  "9♥": "<:hearts9:1379815445590179931>",
+  "10♥": "<:hearts10:>",
+  "J♥": "<:heartsj:>",
+  "Q♥": "<:heartsq:>",
+  "K♥": "<:heartsk:>",
+  "A♦": "<:diamonds1:1379815381077725184>",
+  "2♦": "<:diamonds2:1379815383799828672>",
+  "3♦": "<:diamonds3:1379815386551156877>",
+  "4♦": "<:diamonds4:1379815390313578606>",
+  "5♦": "<:diamonds5:1379815396852502570>",
+  "6♦": "<:diamonds6:1379815400354877581>",
+  "7♦": "<:diamonds7:1379815403068457172>",
+  "8♦": "<:diamonds8:1379815405568393226>",
+  "9♦": "<:diamonds9:1379815408470851654>",
+  "10♦": "<:diamonds10:1379815411855523900>",
+  "J♦": "<:diamondsj:1379815414653259856>",
+  "Q♦": "<:diamondsq:1379815420214775869>",
+  "K♦": "<:diamondsk:1379815417412976670>",
+  "A♣": "<:clubs1:1379814797377278185>",
+  "2♣": "<:clubs2:1379814800514875473>",
+  "3♣": "<:clubs3:1379814802855297094>",
+  "4♣": "<:clubs4:1379814805526810624>",
+  "5♣": "<:clubs5:1379814807926214686>",
+  "6♣": "<:clubs6:1379814810429947934>",
+  "7♣": "<:clubs7:1379814812975890503>",
+  "8♣": "<:clubs8:1379814815266242561>",
+  "9♣": "<:clubs9:1379814818013384806>",
+  "10♣": "<:clubs10:1379814820907450390>",
+  "J♣": "<:clubsj:1379814824799764571>",
+  "Q♣": "<:clubsq:1379814830470332446>",
+  "K♣": "<:clubsk:1379814827039395862>"
+};
+
+// Helper function to render cards using custom emojis
+function renderCard(card) {
+  const cardKey = `${card.rank}${card.suit}`;
+  return customEmojis[cardKey] || `${card.rank}${card.suit}`; // Fallback to default if emoji not found
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("blackjack")
@@ -209,7 +271,7 @@ module.exports = {
       let embed = new EmbedBuilder()
         .setTitle("🃏 Blackjack")
         .setColor(win === true ? 0x00ff99 : win === false ? 0xff0000 : 0xffff00)
-        .setDescription(`Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(playerHand)})\nDealer's hand: ${dealerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(dealerHand)})`)
+        .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${handValue(playerHand)})\nDealer's hand: ${dealerHand.map(renderCard).join(" ")} (Value: ${handValue(dealerHand)})`)
         .addFields(
           { name: win === true ? "Blackjack! You Win!" : win === false ? "Both Blackjack! Draw" : "Draw", value: resultField, inline: false },
           { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
@@ -235,7 +297,7 @@ module.exports = {
     // --- End split state vars ---
     let embed = new EmbedBuilder()
       .setTitle("🃏 Blackjack")
-      .setDescription(`Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${playerValue})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`)
+      .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])}`)
       .setColor(0x5865f2)
       .addFields(
         { name: "How to Play", value: "Press **Hit** to draw a card, **Stand** to hold, **Double Down** to double your bet and draw one card, or **Split** if you have a pair.", inline: false },
@@ -272,7 +334,7 @@ module.exports = {
         user.balance = freshUser.balance; // keep in-memory value in sync
         playerHand.push(drawFromDeck());
         playerValue = handValue(playerHand);
-        embed.setDescription(`You doubled down! Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${playerValue})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`);
+        embed.setDescription(`You doubled down! Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])}`);
         await i.update({ embeds: [embed], components: [row] });
         finished = true;
         collector.stop("double");
@@ -296,7 +358,7 @@ module.exports = {
         splitBets = [amount, amount];
         splitResults = [null, null];
         splitIndex = 0;
-        embed.setDescription(`Split! Playing hand 1: ${splitHands[0].map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(splitHands[0])})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`);
+        embed.setDescription(`Split! Playing hand 1: ${splitHands[0].map(renderCard).join(" ")} (Value: ${handValue(splitHands[0])})\nDealer shows: ${renderCard(dealerHand[0])}`);
         await i.update({ embeds: [embed], components: [row] });
         return;
       }
@@ -305,7 +367,7 @@ module.exports = {
         let hand = splitHands[splitIndex];
         if (i.customId === "hit") {
           hand.push(drawFromDeck());
-          embed.setDescription(`Split! Playing hand ${splitIndex + 1}: ${hand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(hand)})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`);
+          embed.setDescription(`Split! Playing hand ${splitIndex + 1}: ${hand.map(renderCard).join(" ")} (Value: ${handValue(hand)})\nDealer shows: ${renderCard(dealerHand[0])}`);
           await i.update({ embeds: [embed], components: [row] });
           if (handValue(hand) > 21) {
             splitResults[splitIndex] = "bust";
@@ -329,7 +391,7 @@ module.exports = {
       if (i.customId === "hit") {
         playerHand.push(drawFromDeck());
         playerValue = handValue(playerHand);
-        embed.setDescription(`Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${playerValue})\nDealer shows: ${dealerHand[0].rank}${dealerHand[0].suit}`);
+        embed.setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])}`);
         await i.update({ embeds: [embed], components: [row] });
         if (playerValue > 21) {
           finished = true;
@@ -405,7 +467,7 @@ module.exports = {
     embed = new EmbedBuilder()
       .setTitle("🃏 Blackjack")
       .setColor(win === true ? 0x00ff99 : win === false ? 0xff0000 : 0xffff00)
-      .setDescription(`Your hand: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(playerHand)})\nDealer's hand: ${dealerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${handValue(dealerHand)})`)
+      .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${handValue(playerHand)})\nDealer's hand: ${dealerHand.map(renderCard).join(" ")} (Value: ${handValue(dealerHand)})`)
       .addFields(
         { name: win === true ? "You Won!" : win === false ? "You Lost" : "Draw", value: resultField, inline: false },
         { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },

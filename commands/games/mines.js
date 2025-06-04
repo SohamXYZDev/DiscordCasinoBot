@@ -18,9 +18,7 @@ function generateBoard(size, mines) {
 }
 
 function getMultiplier(steps, mines) {
-  // Simple multiplier curve: more steps and more mines = higher payout
-  // Example: 1.2x for 1 safe, up to ~10x for all safe with 5 mines
-  const base = 1.1 + (mines * 0.15);
+  const base = 1.1 + (mines * 0.05);
   return parseFloat((base ** steps).toFixed(2));
 }
 
