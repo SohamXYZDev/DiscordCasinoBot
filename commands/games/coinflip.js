@@ -25,25 +25,27 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const side = interaction.options.getString("side");
-    const amount = interaction.options.getInteger("amount");
     const userId = interaction.user.id;
-
-    if (amount <= 0) {
-      return interaction.reply({
-        content: "🚫 Invalid bet amount.",
-        ephemeral: true,
-      });
+    let amountInput = interaction.options.getInteger("amount");
+    if (amountInput === null || amountInput === undefined) {
+      amountInput = interaction.options.getString("amount");
     }
-
     let user = await User.findOne({ userId });
-    if (!user || user.balance < amount) {
-      return interaction.reply({
-        content: "❌ You don't have enough coins.",
-        ephemeral: true,
-      });
+    if (!user) {
+      return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
     }
-
+    let amount;
+    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all-in") {
+      amount = user.balance;
+    } else {
+      amount = parseInt(amountInput);
+    }
+    if (!amount || amount <= 0) {
+      return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+    }
+    if (user.balance < amount) {
+      return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+    }
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
     }

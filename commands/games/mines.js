@@ -40,14 +40,25 @@ module.exports = {
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
-    const amount = interaction.options.getInteger("amount");
-    const mines = interaction.options.getInteger("mines");
-    const size = 4; // 4x4 board for space for cash out row
-    if (amount <= 0) {
-      return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+    let amountInput = interaction.options.getInteger("amount");
+    // Support 'all-in' as a string
+    if (amountInput === null || amountInput === undefined) {
+      amountInput = interaction.options.getString("amount");
     }
     let user = await User.findOne({ userId });
-    if (!user || user.balance < amount) {
+    if (!user) {
+      return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
+    }
+    let amount;
+    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all-in") {
+      amount = user.balance;
+    } else {
+      amount = parseInt(amountInput);
+    }
+    if (!amount || amount <= 0) {
+      return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+    }
+    if (user.balance < amount) {
       return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
     }
     if (user.banned) {
