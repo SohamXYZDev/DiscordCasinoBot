@@ -18,6 +18,10 @@ const guildConfigSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  houseEdge: {
+    type: Number,
+    default: 5, // percent
+  },
 });
 
 module.exports = mongoose.model("GuildConfig", guildConfigSchema);

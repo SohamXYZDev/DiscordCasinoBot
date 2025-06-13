@@ -52,10 +52,14 @@ module.exports = {
     await user.save();
     // Server currency
     let currency = "coins";
+    // Fetch house edge from config (default 5%)
+    let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
       if (config && config.currency) currency = config.currency;
     }
+    const HOUSE_EDGE = 1 - (houseEdge / 100);
     // Check if game is disabled
     const guildId = interaction.guildId;
     if (guildId) {
@@ -68,7 +72,6 @@ module.exports = {
     await interaction.reply({ content: "<a:loading:1376139232090914846> Choosing rock, paper, or scissors...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
     // Bot's move and house edge
-    const HOUSE_EDGE = 0.90;
     const moves = ["rock", "paper", "scissors"];
     const botMove = moves[Math.floor(Math.random() * 3)];
     const choice = interaction.options.getString("choice");

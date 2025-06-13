@@ -78,8 +78,11 @@ module.exports = {
     await user.save();
     // Server currency
     let currency = "coins";
+    // Fetch house edge from config (default 5%)
+    let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
       if (config && config.currency) currency = config.currency;
     }
     // Game disabled check
@@ -128,9 +131,9 @@ module.exports = {
     let payout = 0;
     let profit = 0;
     if (betOn === winner) {
-      if (winner === "player") profit = Math.floor(amount * 0.90); // 1.90x total, 0.90x profit
-      else if (winner === "banker") profit = Math.floor(amount * 0.85); // 1.85x total, 0.85x profit
-      else if (winner === "tie") profit = Math.floor(amount * 6.5); // 7.5x total, 6.5x profit
+      if (winner === "player") profit = Math.floor(amount * (1 - houseEdge / 100)); // 1.90x total, 0.90x profit if 5% edge
+      else if (winner === "banker") profit = Math.floor(amount * (1 - (houseEdge + 5) / 100)); // 1.85x total, 0.85x profit if 5% edge
+      else if (winner === "tie") profit = Math.floor(amount * (7.5 - (7.5 * houseEdge / 100))); // 7.5x total, house edge applied
       payout = profit;
       user.balance += amount + profit; // Return bet + profit
     } else if (winner === "tie") {

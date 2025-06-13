@@ -95,10 +95,14 @@ module.exports = {
     await user.save();
     // Server currency
     let currency = "coins";
+    // Fetch house edge from config (default 5%)
+    let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
       if (config && config.currency) currency = config.currency;
     }
+    const HOUSE_EDGE = 1 - (houseEdge / 100);
     // Check if game is disabled in server
     const guildId = interaction.guildId;
     if (guildId) {
@@ -170,7 +174,7 @@ module.exports = {
       if (i.customId === "dtower_cashout") {
         finished = true;
         win = true;
-        payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * 0.95); // 5% house edge
+        payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * HOUSE_EDGE);
         user.balance += payout;
         await user.save();
         collector.stop("cashout");
@@ -190,7 +194,7 @@ module.exports = {
           // Reached the top!
           finished = true;
           win = true;
-          payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * 0.95);
+          payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * HOUSE_EDGE);
           user.balance += payout;
           await user.save();
           collector.stop("top");

@@ -68,17 +68,20 @@ module.exports = {
 
     // Fetch server currency
     let currency = "coins";
+    // Fetch house edge from config (default 5%)
+    let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
       if (config && config.currency) currency = config.currency;
     }
+    const HOUSE_EDGE = 1 - (houseEdge / 100);
 
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Flipping a coin...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
 
     // Coin flip logic
-    const HOUSE_EDGE = 0.90;
     const side = interaction.options.getString("side");
     const result = Math.random() < 0.5 ? "heads" : "tails";
     const won = side === result;
