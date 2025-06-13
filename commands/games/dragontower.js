@@ -58,17 +58,30 @@ module.exports = {
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
-    const amount = interaction.options.getInteger("amount");
+    let amountInput = interaction.options.getInteger("amount");
+    // Support 'all-in' as a string
+    if (amountInput === null || amountInput === undefined) {
+      amountInput = interaction.options.getString("amount");
+    }
     const difficulty = interaction.options.getString("difficulty");
     const settings = DIFFICULTY_SETTINGS[difficulty];
     const width = settings.width;
     const height = settings.height;
     const dragonsPerRow = settings.dragons;
-    if (amount <= 0) {
+    let user = await User.findOne({ userId });
+    if (!user) {
+      return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
+    }
+    let amount;
+    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all-in") {
+      amount = user.balance;
+    } else {
+      amount = parseInt(amountInput);
+    }
+    if (!amount || amount <= 0) {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
     }
-    let user = await User.findOne({ userId });
-    if (!user || user.balance < amount) {
+    if (user.balance < amount) {
       return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
     }
     if (user.banned) {

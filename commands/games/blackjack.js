@@ -116,9 +116,9 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("blackjack")
     .setDescription("Play a game of blackjack against the dealer!")
-    .addIntegerOption(option =>
+    .addStringOption(option =>
       option.setName("amount")
-        .setDescription("How many coins to bet")
+        .setDescription("How many coins to bet (number or 'all-in')")
         .setRequired(true)
     ),
   async execute(interaction) {
