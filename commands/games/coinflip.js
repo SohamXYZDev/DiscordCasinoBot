@@ -81,6 +81,7 @@ module.exports = {
 
     // Coin flip logic
     const HOUSE_EDGE = 0.90;
+    const side = interaction.options.getString("side");
     const result = Math.random() < 0.5 ? "heads" : "tails";
     const won = side === result;
     let payout = 0;

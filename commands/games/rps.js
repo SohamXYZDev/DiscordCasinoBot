@@ -77,6 +77,7 @@ module.exports = {
     const HOUSE_EDGE = 0.90;
     const moves = ["rock", "paper", "scissors"];
     const botMove = moves[Math.floor(Math.random() * 3)];
+    const choice = interaction.options.getString("choice");
     let result;
     let payout;
     if (choice === botMove) {

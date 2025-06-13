@@ -29,7 +29,11 @@ module.exports = {
     }
     let user = await User.findOne({ userId });
     if (!user) {
-      return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: "❌ You don't have an account.", ephemeral: true });
+      } else {
+        return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
+      }
     }
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all-in") {
@@ -38,18 +42,34 @@ module.exports = {
       amount = parseInt(amountInput);
     }
     if (!amount || amount <= 0) {
-      return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+      } else {
+        return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+      }
     }
     if (user.balance < amount) {
-      return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: "❌ You don't have enough coins.", ephemeral: true });
+      } else {
+        return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+      }
     }
     if (user.banned) {
-      return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
+      } else {
+        return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
+      }
     }
     // Cooldown (10s)
     const cd = checkCooldown(userId, "hilo", 10);
     if (cd > 0) {
-      return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
+      } else {
+        return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
+      }
     }
     // Deduct initial bet immediately to prevent mid-game quitting exploits
     user.balance -= amount;
