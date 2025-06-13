@@ -36,29 +36,30 @@ module.exports = {
           { name: "Tie (8x)", value: "tie" }
         )
     )
-    .addIntegerOption(option =>
+    .addStringOption(option =>
       option.setName("amount")
-        .setDescription("How many coins to bet")
+        .setDescription("How many coins to bet (number or 'all')")
         .setRequired(true)
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
-    let amountInput = interaction.options.getInteger("amount");
-    if (amountInput === null || amountInput === undefined) {
-      amountInput = interaction.options.getString("amount");
-    }
+    let amountInput = interaction.options.getString("amount");
     let user = await User.findOne({ userId });
-    if (!user) {
-      return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
-    }
     let amount;
-    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all-in") {
+    const betOn = interaction.options.getString("beton");
+    // Accept 'all' (case-insensitive) as all-in bet, but only if user.balance > 0
+    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
     } else {
       amount = parseInt(amountInput);
     }
+    // If user typed 'all' but has 0 balance, treat as invalid
     if (!amount || amount <= 0) {
-      return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+      } else {
+        return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+      }
     }
     if (user.balance < amount) {
       return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
@@ -86,11 +87,19 @@ module.exports = {
     if (guildId) {
       const config = await GuildConfig.findOne({ guildId });
       if (config && config.disabledGames && config.disabledGames.includes("baccarat")) {
-        return interaction.reply({ content: "🚫 The Baccarat game is currently disabled on this server.", ephemeral: true });
+        if (interaction.replied || interaction.deferred) {
+          return interaction.editReply({ content: "🚫 The Baccarat game is currently disabled on this server.", ephemeral: true });
+        } else {
+          return interaction.reply({ content: "🚫 The Baccarat game is currently disabled on this server.", ephemeral: true });
+        }
       }
     }
     // Anticipation message
-    await interaction.reply({ content: "<a:loading:1376139232090914846> Dealing baccarat cards...", ephemeral: false });
+    if (interaction.replied || interaction.deferred) {
+      await interaction.editReply({ content: "<a:loading:1376139232090914846> Dealing baccarat cards...", ephemeral: false });
+    } else {
+      await interaction.reply({ content: "<a:loading:1376139232090914846> Dealing baccarat cards...", ephemeral: false });
+    }
     await new Promise(res => setTimeout(res, 1500));
     // Initial hands
     let playerHand = [drawCard(), drawCard()];
@@ -117,11 +126,13 @@ module.exports = {
     else winner = "tie";
     // Payouts with house edge
     let payout = 0;
+    let profit = 0;
     if (betOn === winner) {
-      if (winner === "player") payout = Math.floor(amount * 1.90); // 5% house edge
-      else if (winner === "banker") payout = Math.floor(amount * 1.85); // 7.5% house edge
-      else if (winner === "tie") payout = Math.floor(amount * 7.5); // 6.25% house edge
-      user.balance += amount + payout; // Return bet + profit
+      if (winner === "player") profit = Math.floor(amount * 0.90); // 1.90x total, 0.90x profit
+      else if (winner === "banker") profit = Math.floor(amount * 0.85); // 1.85x total, 0.85x profit
+      else if (winner === "tie") profit = Math.floor(amount * 6.5); // 7.5x total, 6.5x profit
+      payout = profit;
+      user.balance += amount + profit; // Return bet + profit
     } else if (winner === "tie") {
       payout = 0;
       user.balance += amount; // Refund bet on draw

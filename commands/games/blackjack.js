@@ -118,12 +118,20 @@ module.exports = {
     .setDescription("Play a game of blackjack against the dealer!")
     .addStringOption(option =>
       option.setName("amount")
-        .setDescription("How many coins to bet (number or 'all-in')")
+        .setDescription("How many coins to bet (number or 'all')")
         .setRequired(true)
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
-    const amount = interaction.options.getInteger("amount");
+    const amountInput = interaction.options.getString("amount");
+    let user = await User.findOne({ userId });
+    let amount;
+    // Accept 'all' (case-insensitive) as all-in bet
+    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
+      amount = user.balance;
+    } else {
+      amount = parseInt(amountInput);
+    }
     if (amount <= 0) {
       if (interaction.replied || interaction.deferred) {
         return interaction.editReply({ content: "🚫 Invalid bet amount.", ephemeral: true });
@@ -131,7 +139,6 @@ module.exports = {
         return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
       }
     }
-    let user = await User.findOne({ userId });
     if (!user || user.balance < amount) {
       if (interaction.replied || interaction.deferred) {
         return interaction.editReply({ content: "❌ You don't have enough coins.", ephemeral: true });
@@ -454,6 +461,7 @@ module.exports = {
     } else if (playerValue === dealerValue) {
       win = null;
       payout = 0;
+      user.balance += betForResult; // Refund bet on draw
     } else {
       win = false;
       payout = -betForResult;

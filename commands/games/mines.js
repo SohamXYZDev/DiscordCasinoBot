@@ -26,9 +26,9 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("mines")
     .setDescription("Play Mines! Avoid the mines and cash out for bigger rewards.")
-    .addIntegerOption(option =>
+    .addStringOption(option =>
       option.setName("amount")
-        .setDescription("How many coins to bet")
+        .setDescription("How many coins to bet (number or 'all')")
         .setRequired(true)
     )
     .addIntegerOption(option =>
@@ -40,17 +40,10 @@ module.exports = {
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
-    let amountInput = interaction.options.getInteger("amount");
-    // Support 'all-in' as a string
-    if (amountInput === null || amountInput === undefined) {
-      amountInput = interaction.options.getString("amount");
-    }
+    let amountInput = interaction.options.getString("amount");
     let user = await User.findOne({ userId });
-    if (!user) {
-      return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
-    }
     let amount;
-    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all-in") {
+    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
     } else {
       amount = parseInt(amountInput);
