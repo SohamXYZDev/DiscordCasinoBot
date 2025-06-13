@@ -56,14 +56,15 @@ module.exports = {
       }
     }
 
-    const cooldownSeconds = 15;
-    const cd = checkCooldown(userId, "coinflip", cooldownSeconds);
+    // Cooldown (10s)
+    const cd = checkCooldown(userId, "coinflip", 10);
     if (cd > 0) {
-      return interaction.reply({
-        content: `⏳ You must wait ${cd}s before flipping again.`,
-        ephemeral: true,
-      });
+      return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
     }
+    // Deduct initial bet immediately to prevent mid-game quitting exploits
+    user.balance -= amount;
+    if (user.balance < 0) user.balance = 0;
+    await user.save();
 
     // Fetch server currency
     let currency = "coins";
@@ -80,9 +81,13 @@ module.exports = {
     const HOUSE_EDGE = 0.90;
     const result = Math.random() < 0.5 ? "heads" : "tails";
     const won = side === result;
-    let payout = won ? Math.floor(amount * HOUSE_EDGE) : -amount;
-    if (won) user.balance += payout;
-    else user.balance -= amount;
+    let payout = 0;
+    if (won) {
+      payout = Math.floor(amount * HOUSE_EDGE);
+      user.balance += amount + payout; // Return bet + profit
+    } else {
+      payout = 0; // Already deducted at start
+    }
 
     let resultText, color;
     let xpGain = 5;

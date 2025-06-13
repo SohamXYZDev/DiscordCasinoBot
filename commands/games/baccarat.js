@@ -55,11 +55,15 @@ module.exports = {
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
     }
-    // Cooldown (20s)
-    const cd = checkCooldown(userId, "baccarat", 20);
+    // Cooldown (10s)
+    const cd = checkCooldown(userId, "baccarat", 10);
     if (cd > 0) {
       return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
     }
+    // Deduct initial bet immediately to prevent mid-game quitting exploits
+    user.balance -= amount;
+    if (user.balance < 0) user.balance = 0;
+    await user.save();
     // Server currency
     let currency = "coins";
     if (interaction.guildId) {
@@ -106,10 +110,12 @@ module.exports = {
       if (winner === "player") payout = Math.floor(amount * 1.90); // 5% house edge
       else if (winner === "banker") payout = Math.floor(amount * 1.85); // 7.5% house edge
       else if (winner === "tie") payout = Math.floor(amount * 7.5); // 6.25% house edge
-      user.balance += payout;
+      user.balance += amount + payout; // Return bet + profit
+    } else if (winner === "tie") {
+      payout = 0;
+      user.balance += amount; // Refund bet on draw
     } else {
-      payout = -amount;
-      user.balance -= amount;
+      payout = 0; // Already deducted at start
     }
     // XP
     let xpGain = 10;

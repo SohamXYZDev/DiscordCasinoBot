@@ -40,6 +40,10 @@ module.exports = {
     if (cd > 0) {
       return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
     }
+    // Deduct initial bet immediately to prevent mid-game quitting exploits
+    user.balance -= amount;
+    if (user.balance < 0) user.balance = 0;
+    await user.save();
     // Server currency
     let currency = "coins";
     if (interaction.guildId) {
@@ -58,16 +62,22 @@ module.exports = {
     let result;
     if ((guess === "higher" && second > first) || (guess === "lower" && second < first)) {
       result = "win";
+    } else if (second === first) {
+      result = "draw";
     } else {
       result = "lose";
     }
     // House edge: 5% reduction in payout
     const HOUSE_EDGE = 0.90;
-    let payout = result === "win" ? Math.floor(amount * HOUSE_EDGE) : -amount;
-    if (result === "win") {
-      user.balance += payout;
+    let payout;
+    if (result === "draw") {
+      payout = 0;
+      user.balance += amount; // Refund bet on draw
+    } else if (result === "win") {
+      payout = Math.floor(amount * HOUSE_EDGE);
+      user.balance += amount + payout; // Return bet + profit
     } else {
-      user.balance -= amount;
+      payout = 0; // Already deducted at start
     }
     let resultText, color;
     let xpGain = 5;
@@ -75,6 +85,10 @@ module.exports = {
       user.xp += xpGain * 2;
       resultText = `You win! You gained **+${payout} ${currency}**.`;
       color = 0x00ff99;
+    } else if (result === "draw") {
+      user.xp += xpGain;
+      resultText = `It's a draw! You get your bet back: **+${amount} ${currency}**.`;
+      color = 0xffff00;
     } else {
       user.xp += xpGain;
       resultText = `You lose! You lost **-${amount} ${currency}**.`;

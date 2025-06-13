@@ -47,6 +47,10 @@ module.exports = {
     if (cd > 0) {
       return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
     }
+    // Deduct initial bet immediately to prevent mid-game quitting exploits
+    user.balance -= amount;
+    if (user.balance < 0) user.balance = 0;
+    await user.save();
     // Server currency
     let currency = "coins";
     if (interaction.guildId) {
@@ -73,10 +77,13 @@ module.exports = {
     // House edge: reduce payout by 5%
     const HOUSE_EDGE = 0.90;
     let win = resultColor === color;
-    let payout = win ? Math.floor(amount * PAYOUTS[color] * HOUSE_EDGE) : -amount;
-    if (win) user.balance += payout;
-    else user.balance -= amount;
-
+    let payout;
+    if (win) {
+      payout = Math.floor(amount * PAYOUTS[color] * HOUSE_EDGE);
+      user.balance += payout;
+    } else {
+      payout = 0; // Already deducted at start
+    }
     let resultText;
     let xpGain = 5;
     if (win) {
