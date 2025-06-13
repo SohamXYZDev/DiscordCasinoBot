@@ -87,15 +87,15 @@ module.exports = {
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
     }
+    // Cooldown (10s)
+    const cd = checkCooldown(userId, "dragontower", 10);
+    if (cd > 0) {
+      return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
+    }
     // Deduct initial bet immediately to prevent mid-game quitting exploits
     user.balance -= amount;
     if (user.balance < 0) user.balance = 0;
     await user.save();
-    // Cooldown (20s)
-    const cd = checkCooldown(userId, "dragontower", 20);
-    if (cd > 0) {
-      return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
-    }
     // Server currency
     let currency = "coins";
     if (interaction.guildId) {

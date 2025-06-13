@@ -64,11 +64,15 @@ module.exports = {
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
     }
-    // Cooldown (20s)
-    const cd = checkCooldown(userId, "mines", 20);
+    // Cooldown (10s)
+    const cd = checkCooldown(userId, "mines", 10);
     if (cd > 0) {
       return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
     }
+    // Deduct initial bet immediately to prevent mid-game quitting exploits
+    user.balance -= amount;
+    if (user.balance < 0) user.balance = 0;
+    await user.save();
     // Server currency
     let currency = "coins";
     if (interaction.guildId) {
@@ -86,9 +90,6 @@ module.exports = {
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Setting up the mines...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
-    // Deduct bet up front
-    user.balance -= amount;
-    await user.save();
     // Game state
     let board = generateBoard(size, mines);
     let revealed = Array(size * size).fill(false);

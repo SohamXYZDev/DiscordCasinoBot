@@ -123,35 +123,42 @@ module.exports = {
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
-    let amountInput = interaction.options.getString("amount");
+    const amount = interaction.options.getInteger("amount");
+    if (amount <= 0) {
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+      } else {
+        return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
+      }
+    }
     let user = await User.findOne({ userId });
-    if (!user) {
-      return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
-    }
-    let amount;
-    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all-in") {
-      amount = user.balance;
-    } else {
-      amount = parseInt(amountInput);
-    }
-    if (!amount || amount <= 0) {
-      return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
-    }
-    if (user.balance < amount) {
-      return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+    if (!user || user.balance < amount) {
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: "❌ You don't have enough coins.", ephemeral: true });
+      } else {
+        return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+      }
     }
     if (user.banned) {
-      return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
+      } else {
+        return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
+      }
+    }
+    // Cooldown (10s)
+    const cd = checkCooldown(userId, "blackjack", 10);
+    if (cd > 0) {
+      if (interaction.replied || interaction.deferred) {
+        return interaction.editReply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
+      } else {
+        return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
+      }
     }
     // Deduct initial bet immediately to prevent mid-game quitting exploits
     user.balance -= amount;
     if (user.balance < 0) user.balance = 0;
     await user.save();
-    // Cooldown (20s)
-    const cd = checkCooldown(userId, "blackjack", 20);
-    if (cd > 0) {
-      return interaction.reply({ content: `⏳ You must wait ${cd}s before playing again.`, ephemeral: true });
-    }
     // Server currency
     let currency = "coins";
     if (interaction.guildId) {
@@ -176,6 +183,27 @@ module.exports = {
     let dealerHand = [drawFromDeck(), drawFromDeck()];
     let playerValue = handValue(playerHand);
     let dealerValue = handValue([dealerHand[0]]); // Only show one card
+
+    // Initialize embed before any use (including insurance logic)
+    let embed = new EmbedBuilder()
+      .setTitle("🃏 Blackjack")
+      .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])}`)
+      .setColor(0x5865f2)
+      .setFields(
+        { name: "How to Play", value: "Press **Hit** to draw a card, **Stand** to hold, **Double Down** to double your bet and draw one card, or **Split** if you have a pair.", inline: false },
+        { name: "Your Bet", value: `${amount} ${currency}`, inline: false }
+      )
+      .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
+
+    // Prepare the row variable BEFORE any use (including insurance logic)
+    let canSplit = playerHand[0].rank === playerHand[1].rank;
+    let canDouble = user.balance >= amount && playerHand.length === 2;
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("hit").setLabel("Hit").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("double").setLabel("Double Down").setStyle(ButtonStyle.Danger).setDisabled(!canDouble),
+      new ButtonBuilder().setCustomId("split").setLabel("Split").setStyle(ButtonStyle.Success).setDisabled(!canSplit)
+    );
 
     // Insurance logic (stake.com): Offer if dealer shows Ace
     let insuranceOffered = false;
@@ -238,7 +266,7 @@ module.exports = {
       } else {
         // Player wins with blackjack, 3:2 payout (house edge applied)
         win = true;
-        payout = Math.floor(amount * 1.425); // 1.5x (3:2) - 5% house edge
+        payout = Math.floor(amount * 0.5 * 0.95); // Only profit for blackjack win (0.5x, 5% house edge)
         if (insuranceTaken) {
           insurancePayout = 0;
         }
@@ -247,8 +275,15 @@ module.exports = {
     }
 
     if (finished) {
-      if (win === true) user.balance += payout;
-      else if (win === false) user.balance -= amount;
+      if (win === true) {
+        payout = Math.floor(amount * 0.5 * 0.95); // blackjack profit
+        user.balance += amount + payout; // Return bet + profit
+      } else if (win === null) {
+        payout = 0;
+        user.balance += amount; // Refund bet on draw
+      } else if (win === false) {
+        payout = 0; // Already deducted at start
+      }
       // XP
       let xpGain = 10;
       if (win === true) user.xp += xpGain * 2;
@@ -277,7 +312,7 @@ module.exports = {
       if (win === true) resultField = `**+${payout} ${currency}**`;
       else if (win === false) resultField = `**-${amount} ${currency}**`;
       else resultField = "No change (draw)";
-      let embed = new EmbedBuilder()
+      let finalEmbed = new EmbedBuilder()
         .setTitle("🃏 Blackjack")
         .setColor(win === true ? 0x00ff99 : win === false ? 0xff0000 : 0xffff00)
         .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${handValue(playerHand)})\nDealer's hand: ${dealerHand.map(renderCard).join(" ")} (Value: ${handValue(dealerHand)})`)
@@ -287,16 +322,12 @@ module.exports = {
           { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
         );
       if (insuranceTaken) {
-        embed.addFields({ name: "Insurance", value: insurancePayout > 0 ? `You won insurance: **+${insurancePayout} ${currency}**` : "Insurance lost.", inline: false });
+        finalEmbed.addFields({ name: "Insurance", value: insurancePayout > 0 ? `You won insurance: **+${insurancePayout} ${currency}**` : "Insurance lost.", inline: false });
       }
-      embed.setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
-      await interaction.editReply({ embeds: [embed], components: [], content: null });
+      finalEmbed.setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
+      await interaction.editReply({ embeds: [finalEmbed], components: [], content: null });
       return;
     }
-
-    // Show initial hand with buttons
-    let canSplit = playerHand[0].rank === playerHand[1].rank;
-    let canDouble = user.balance >= amount && playerHand.length === 2;
     // --- Add split state variables here ---
     let splitActive = false;
     let splitHands = null;
@@ -304,26 +335,11 @@ module.exports = {
     let splitResults = null;
     let splitIndex = 0;
     // --- End split state vars ---
-    let embed = new EmbedBuilder()
-      .setTitle("🃏 Blackjack")
-      .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])}`)
-      .setColor(0x5865f2)
-      .addFields(
-        { name: "How to Play", value: "Press **Hit** to draw a card, **Stand** to hold, **Double Down** to double your bet and draw one card, or **Split** if you have a pair.", inline: false },
-        { name: "Your Bet", value: `${amount} ${currency}`, inline: false }
-      )
-      .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("hit").setLabel("Hit").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("double").setLabel("Double Down").setStyle(ButtonStyle.Danger).setDisabled(!canDouble),
-      new ButtonBuilder().setCustomId("split").setLabel("Split").setStyle(ButtonStyle.Success).setDisabled(!canSplit)
-    );
     await interaction.editReply({ embeds: [embed], components: [row], content: null });
 
     // Await user interaction for hit/stand/double/split
     let doubleDown = false;
-    collector = interaction.channel.createMessageComponentCollector({
+    let collector = interaction.channel.createMessageComponentCollector({
       filter: i => i.user.id === interaction.user.id && ["hit", "stand", "double", "split"].includes(i.customId),
       time: 30000
     });
@@ -434,7 +450,7 @@ module.exports = {
       payout = -betForResult;
     } else if (dealerValue > 21 || playerValue > dealerValue) {
       win = true;
-      payout = Math.floor(betForResult * 0.95); // 1:1 payout minus 5% house edge for double down
+      payout = betForResult + Math.floor(betForResult * 0.95); // Return original bet + profit
     } else if (playerValue === dealerValue) {
       win = null;
       payout = 0;
@@ -442,8 +458,8 @@ module.exports = {
       win = false;
       payout = -betForResult;
     }
-    if (win === true) user.balance += payout;
-    else if (win === false) user.balance -= betForResult;
+    if (win === true) user.balance += betForResult + Math.floor(betForResult * 0.95);
+    // Do NOT deduct again on loss, already deducted at start
     if (user.balance < 0) user.balance = 0;
     // XP
     let xpGain = 10;
@@ -473,7 +489,7 @@ module.exports = {
     if (win === true) resultField = `**+${payout} ${currency}**`;
     else if (win === false) resultField = `**-${amount} ${currency}**`;
     else resultField = "No change (draw)";
-    embed = new EmbedBuilder()
+    let finalEmbed = new EmbedBuilder()
       .setTitle("🃏 Blackjack")
       .setColor(win === true ? 0x00ff99 : win === false ? 0xff0000 : 0xffff00)
       .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${handValue(playerHand)})\nDealer's hand: ${dealerHand.map(renderCard).join(" ")} (Value: ${handValue(dealerHand)})`)
@@ -484,8 +500,8 @@ module.exports = {
       )
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
     if (doubleDown) {
-      embed.addFields({ name: "Double Down", value: `You doubled your bet to **${betForResult} ${currency}**.`, inline: false });
+      finalEmbed.addFields({ name: "Double Down", value: `You doubled your bet to **${betForResult} ${currency}**.`, inline: false });
     }
-    await interaction.editReply({ embeds: [embed], components: [disabledRow], content: null });
+    await interaction.editReply({ embeds: [finalEmbed], components: [disabledRow], content: null });
   },
 };
