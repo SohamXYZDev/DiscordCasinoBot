@@ -39,9 +39,9 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("dragontower")
     .setDescription("Climb the Dragon Tower! Pick a safe tile each floor and cash out for bigger rewards.")
-    .addIntegerOption(option =>
+    .addStringOption(option =>
       option.setName("amount")
-        .setDescription("How many coins to bet")
+        .setDescription("How many coins to bet (number or 'all')")
         .setRequired(true)
     )
     .addStringOption(option =>
@@ -58,25 +58,22 @@ module.exports = {
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
-    let amountInput = interaction.options.getInteger("amount");
-    // Support 'all-in' as a string
-    if (amountInput === null || amountInput === undefined) {
-      amountInput = interaction.options.getString("amount");
+    let amountInput = interaction.options.getString("amount");
+    // Accept 'all' (case-insensitive) as all-in bet
+    let user = await User.findOne({ userId });
+    let amount;
+    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
+      amount = user.balance;
+    } else {
+      amount = parseInt(amountInput);
     }
     const difficulty = interaction.options.getString("difficulty");
     const settings = DIFFICULTY_SETTINGS[difficulty];
     const width = settings.width;
     const height = settings.height;
     const dragonsPerRow = settings.dragons;
-    let user = await User.findOne({ userId });
     if (!user) {
       return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
-    }
-    let amount;
-    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all-in") {
-      amount = user.balance;
-    } else {
-      amount = parseInt(amountInput);
     }
     if (!amount || amount <= 0) {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
@@ -98,10 +95,14 @@ module.exports = {
     await user.save();
     // Server currency
     let currency = "coins";
+    // Fetch house edge from config (default 5%)
+    let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
       if (config && config.currency) currency = config.currency;
     }
+    const HOUSE_EDGE = 1 - (houseEdge / 100);
     // Check if game is disabled in server
     const guildId = interaction.guildId;
     if (guildId) {
@@ -173,7 +174,7 @@ module.exports = {
       if (i.customId === "dtower_cashout") {
         finished = true;
         win = true;
-        payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * 0.95); // 5% house edge
+        payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * HOUSE_EDGE);
         user.balance += payout;
         await user.save();
         collector.stop("cashout");
@@ -193,7 +194,7 @@ module.exports = {
           // Reached the top!
           finished = true;
           win = true;
-          payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * 0.95);
+          payout = Math.floor(amount * getMultiplierDragon(currentLevel, width, dragonsPerRow) * HOUSE_EDGE);
           user.balance += payout;
           await user.save();
           collector.stop("top");

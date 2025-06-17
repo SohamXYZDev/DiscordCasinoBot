@@ -17,25 +17,23 @@ module.exports = {
           { name: "Tails", value: "tails" }
         )
     )
-    .addIntegerOption(option =>
+    .addStringOption(option =>
       option
         .setName("amount")
-        .setDescription("How many coins to bet")
+        .setDescription("How many coins to bet (number or 'all')")
         .setRequired(true)
     ),
 
   async execute(interaction) {
     const userId = interaction.user.id;
-    let amountInput = interaction.options.getInteger("amount");
-    if (amountInput === null || amountInput === undefined) {
-      amountInput = interaction.options.getString("amount");
-    }
+    let amountInput = interaction.options.getString("amount");
     let user = await User.findOne({ userId });
     if (!user) {
       return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
     }
     let amount;
-    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all-in") {
+    // Accept 'all' or 'all-in' (case-insensitive) as all-in bet
+    if (typeof amountInput === "string" && ["all", "all-in"].includes(amountInput.toLowerCase())) {
       amount = user.balance;
     } else {
       amount = parseInt(amountInput);
@@ -70,17 +68,20 @@ module.exports = {
 
     // Fetch server currency
     let currency = "coins";
+    // Fetch house edge from config (default 5%)
+    let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
       if (config && config.currency) currency = config.currency;
     }
+    const HOUSE_EDGE = 1 - (houseEdge / 100);
 
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Flipping a coin...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
 
     // Coin flip logic
-    const HOUSE_EDGE = 0.90;
     const side = interaction.options.getString("side");
     const result = Math.random() < 0.5 ? "heads" : "tails";
     const won = side === result;

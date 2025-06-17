@@ -118,12 +118,20 @@ module.exports = {
     .setDescription("Play a game of blackjack against the dealer!")
     .addStringOption(option =>
       option.setName("amount")
-        .setDescription("How many coins to bet (number or 'all-in')")
+        .setDescription("How many coins to bet (number or 'all')")
         .setRequired(true)
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
-    const amount = interaction.options.getInteger("amount");
+    const amountInput = interaction.options.getString("amount");
+    let user = await User.findOne({ userId });
+    let amount;
+    // Accept 'all' (case-insensitive) as all-in bet
+    if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
+      amount = user.balance;
+    } else {
+      amount = parseInt(amountInput);
+    }
     if (amount <= 0) {
       if (interaction.replied || interaction.deferred) {
         return interaction.editReply({ content: "🚫 Invalid bet amount.", ephemeral: true });
@@ -131,7 +139,6 @@ module.exports = {
         return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
       }
     }
-    let user = await User.findOne({ userId });
     if (!user || user.balance < amount) {
       if (interaction.replied || interaction.deferred) {
         return interaction.editReply({ content: "❌ You don't have enough coins.", ephemeral: true });
@@ -161,10 +168,14 @@ module.exports = {
     await user.save();
     // Server currency
     let currency = "coins";
+    // Fetch house edge from config (default 5%)
+    let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
       if (config && config.currency) currency = config.currency;
     }
+    const HOUSE_EDGE = 1 - (houseEdge / 100);
     // Check if game is disabled
     const guildId = interaction.guildId;
     if (guildId) {
@@ -266,7 +277,7 @@ module.exports = {
       } else {
         // Player wins with blackjack, 3:2 payout (house edge applied)
         win = true;
-        payout = Math.floor(amount * 0.5 * 0.95); // Only profit for blackjack win (0.5x, 5% house edge)
+        payout = Math.floor(amount * 0.5 * HOUSE_EDGE); // Only profit for blackjack win (0.5x, house edge)
         if (insuranceTaken) {
           insurancePayout = 0;
         }
@@ -276,7 +287,7 @@ module.exports = {
 
     if (finished) {
       if (win === true) {
-        payout = Math.floor(amount * 0.5 * 0.95); // blackjack profit
+        payout = Math.floor(amount * 0.5 * HOUSE_EDGE); // blackjack profit
         user.balance += amount + payout; // Return bet + profit
       } else if (win === null) {
         payout = 0;
@@ -450,15 +461,16 @@ module.exports = {
       payout = -betForResult;
     } else if (dealerValue > 21 || playerValue > dealerValue) {
       win = true;
-      payout = betForResult + Math.floor(betForResult * 0.95); // Return original bet + profit
+      payout = betForResult + Math.floor(betForResult * HOUSE_EDGE); // Return original bet + profit
     } else if (playerValue === dealerValue) {
       win = null;
       payout = 0;
+      user.balance += betForResult; // Refund bet on draw
     } else {
       win = false;
       payout = -betForResult;
     }
-    if (win === true) user.balance += betForResult + Math.floor(betForResult * 0.95);
+    if (win === true) user.balance += betForResult + Math.floor(betForResult * HOUSE_EDGE);
     // Do NOT deduct again on loss, already deducted at start
     if (user.balance < 0) user.balance = 0;
     // XP
