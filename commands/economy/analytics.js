@@ -18,35 +18,34 @@ module.exports = {
       return interaction.reply({ content: "You haven't played any games yet!", ephemeral: true });
     }
     // Aggregate stats
-    let totalWins = 0, totalLosses = 0, totalDraws = 0, netAmount = 0;
+    let totalWins = 0, totalLosses = 0, totalDraws = 0, totalWagered = 0;
     const gameStats = {};
     for (const bet of bets) {
       const { game, result, payout, amount } = bet;
+      totalWagered += amount;
       if (!gameStats[game]) {
-        gameStats[game] = { played: 0, wins: 0, losses: 0, draws: 0, net: 0 };
+        gameStats[game] = { played: 0, wins: 0, losses: 0, draws: 0, net: 0, wagered: 0 };
       }
       gameStats[game].played++;
+      gameStats[game].wagered += amount;
       if (result === "win") {
         totalWins++;
         gameStats[game].wins++;
         gameStats[game].net += payout;
-        netAmount += payout;
       } else if (result === "lose") {
         totalLosses++;
         gameStats[game].losses++;
         gameStats[game].net -= amount;
-        netAmount -= amount;
       } else if (result === "draw") {
         totalDraws++;
         gameStats[game].draws++;
       }
     }
     const totalGames = totalWins + totalLosses + totalDraws;
-    const winRate = totalGames ? ((totalWins / totalGames) * 100).toFixed(1) : "0.0";
     // Most played games
     const sortedGames = Object.entries(gameStats).sort((a, b) => b[1].played - a[1].played);
     const mostPlayed = sortedGames.slice(0, 3).map(([game, stats], i) =>
-      `**${i + 1}. ${game.charAt(0).toUpperCase() + game.slice(1)}**: ${stats.played} games`
+      `**${i + 1}. ${game.charAt(0).toUpperCase() + game.slice(1)}**${stats.played} games`
     ).join("\n");
     // Per-game stats
     const perGameStats = sortedGames.map(([game, stats]) =>
@@ -62,10 +61,9 @@ module.exports = {
         { name: "Wins", value: `${totalWins}`, inline: true },
         { name: "Losses", value: `${totalLosses}`, inline: true },
         { name: "Draws", value: `${totalDraws}`, inline: true },
-        { name: "Win Rate", value: `${winRate}%`, inline: true },
-        { name: "Net Amount Won/Lost", value: `${netAmount >= 0 ? "+" : "-"}${Math.abs(netAmount)}`, inline: true },
-        { name: "Most Played Games", value: mostPlayed || "None", inline: false },
-        { name: "Per-Game Stats", value: perGameStats || "No data", inline: false }
+        { name: "Total Amount Wagered", value: `${totalWagered}`, inline: true },
+        { name: "Most Played", value: mostPlayed || "None", inline: false },
+        { name: "Game Stats", value: perGameStats || "No data", inline: false }
       )
       .setFooter({ text: `Requested by ${interaction.user.tag}` });
     await interaction.reply({ embeds: [embed], ephemeral: true });
