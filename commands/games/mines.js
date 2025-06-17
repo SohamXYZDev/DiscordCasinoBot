@@ -87,6 +87,9 @@ module.exports = {
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Setting up the mines...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
+    // Get board size (default 4)
+    const size = 4;
+    const mines = interaction.options.getInteger("mines");
     // Game state
     let board = generateBoard(size, mines);
     let revealed = Array(size * size).fill(false);
