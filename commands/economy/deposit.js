@@ -57,8 +57,6 @@ module.exports = {
     const selected = interaction.values[0];
     const crypto = CRYPTO_OPTIONS.find(opt => opt.value === selected);
     if (!crypto) return interaction.reply({ content: "Unknown crypto.", ephemeral: true });
-    await interaction.reply({ content: `**${crypto.label} ADDRESS:**
-
-${crypto.address}` });
+    await interaction.reply({ content: `**${crypto.label} ADDRESS:**\n\n\`\`\`\n${crypto.address}\n\`\`\`\n\n**➡️ After sending your crypto, send the transaction link here. An admin will verify it and update your balance shortly.**` });
   },
 };

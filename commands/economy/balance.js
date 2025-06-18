@@ -20,7 +20,8 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(0x00ff99)
       .setTitle("Your Balance")
-      .setDescription(`💰 **${balance} ${currency}**`)
+      .setDescription(`
+        **${balance} ${currency}**`)
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
 
     await interaction.reply({ embeds: [embed] });
