@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
+const { getUserBalance } = require("../../utils/economy");
 
 // Crypto options (same as deposit)
 const CRYPTO_OPTIONS = [
@@ -22,6 +23,12 @@ module.exports = {
   async execute(interaction) {
     const guild = interaction.guild;
     const user = interaction.user;
+    const amount = interaction.options.getInteger("amount");
+    // Check user balance
+    const balance = await getUserBalance(user.id);
+    if (amount > balance) {
+      return interaction.reply({ content: `🚫 You do not have enough chips to withdraw. Your balance: **${balance}**`, ephemeral: true });
+    }
     // Check for existing ticket
     const existing = guild.channels.cache.find(
       c => c.name.startsWith("withdraw-") && c.topic === `Withdraw ticket for ${user.id}`
