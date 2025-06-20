@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
 const { getUserBalance } = require("../../utils/economy");
+const Bet = require("../../models/Bet");
 
 // Crypto options (same as deposit)
 const CRYPTO_OPTIONS = [
@@ -28,6 +29,12 @@ module.exports = {
     const balance = await getUserBalance(user.id);
     if (amount > balance) {
       return interaction.reply({ content: `🚫 You do not have enough chips to withdraw. Your balance: **${balance}**`, ephemeral: true });
+    }
+    // Check if user has wagered at least 80% of the withdrawal amount
+    const bets = await Bet.find({ userId: user.id });
+    const totalWagered = bets.reduce((sum, bet) => sum + (bet.amount || 0), 0);
+    if (totalWagered < 0.8 * amount) {
+      return interaction.reply({ content: `🚫 You must wager at least 80% of the amount you want to withdraw before you can withdraw. You have wagered **${totalWagered}** out of **${Math.ceil(0.8 * amount)}** required.`, ephemeral: true });
     }
     // Check for existing ticket
     const existing = guild.channels.cache.find(
