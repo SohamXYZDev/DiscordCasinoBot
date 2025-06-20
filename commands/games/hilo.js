@@ -139,7 +139,9 @@ module.exports = {
     });
     const embed = new EmbedBuilder()
       .setTitle("🔢 HiLo")
-      .setColor(color)
+      .setColor(
+        result === "win" ? 0x41fb2e : result === "lose" ? 0xff0000 : 0xffff00
+      )
       .setDescription(`First number: **${first}**\nSecond number: **${second}**`)
       .addFields(
         { name: "Your Guess", value: guess.charAt(0).toUpperCase() + guess.slice(1), inline: true },
@@ -147,7 +149,14 @@ module.exports = {
         { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
         { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
       )
-      .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
+      .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() })
+      .setImage(
+        result === "win"
+          ? "https://media.discordapp.net/attachments/1374310263003807778/1384544227194699826/YOU_WIN.png?ex=6853798b&is=6852280b&hm=d31e968dd8213c5bd8a94521ac75aae7d89bf8323c4500417dbd6b5cca3fe2e2&=&format=webp&quality=lossless"
+          : result === "lose"
+          ? "https://media.discordapp.net/attachments/1374310263003807778/1384544208207216780/YOU_WIN_1.png?ex=68537986&is=68522806&hm=9e03f6c8972301801a3c69b80e5de72a851bbf5c542b2c8de195ca39bd6e1727&=&format=webp&quality=lossless"
+          : "https://media.discordapp.net/attachments/1374336171341254741/1384893853445918812/YOU_WIN_2.png?ex=68541668&is=6852c4e8&hm=cd5a689a50ab22dc57ee9e5b4c2f97bc2eb54c6515a9bde2052fceac3224e19e&=&format=webp&quality=lossless"
+      );
     await interaction.editReply({ embeds: [embed], content: null });
   },
 };

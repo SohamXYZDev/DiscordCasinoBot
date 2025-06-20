@@ -16,6 +16,16 @@ client.once("ready", async () => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  // Handle select menu for /deposit
+  if (interaction.isStringSelectMenu() && interaction.customId === 'deposit-crypto-select') {
+    const depositCmd = require('./commands/economy/deposit.js');
+    return depositCmd.handleComponent(interaction);
+  }
+  // Handle select menu for /withdraw
+  if (interaction.isStringSelectMenu() && interaction.customId === 'withdraw-crypto-select') {
+    const withdrawCmd = require('./commands/economy/withdraw.js');
+    return withdrawCmd.handleComponent(interaction);
+  }
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
