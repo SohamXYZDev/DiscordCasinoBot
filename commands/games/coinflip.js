@@ -78,14 +78,26 @@ module.exports = {
     }
     const HOUSE_EDGE = 1 - (houseEdge / 100);
 
+    // Fetch probability from config (default 50%)
+    let winProbability = 50;
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.probabilities && typeof config.probabilities.coinflip === "number") {
+        winProbability = config.probabilities.coinflip;
+      }
+    }
+    // Determine win using probability
+    const userWins = Math.random() * 100 < winProbability;
+    const flipResult = userWins ? side : (side === "heads" ? "tails" : "heads");
+
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Flipping a coin...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
 
     // Coin flip logic
-    const result = Math.random() < 0.5 ? "heads" : "tails";
-    const won = side === result;
+    const won = flipResult === side;
     let payout = 0;
+    let result = won ? "win" : "lose";
     if (won) {
       payout = Math.floor(amount * HOUSE_EDGE);
       user.balance += amount + payout; // Return bet + profit
@@ -122,9 +134,9 @@ module.exports = {
       userId,
       game: "coinflip",
       amount,
-      result: won ? "win" : "lose",
+      result,
       payout: won ? payout : -amount,
-      details: { side, result },
+      details: { side, flipResult },
     });
 
     const embed = new EmbedBuilder()
@@ -132,7 +144,7 @@ module.exports = {
       .setColor(won ? 0x41fb2e : 0xff0000)
       .addFields(
         { name: "Your Bet", value: `${amount} ${currency} on ${side.charAt(0).toUpperCase() + side.slice(1)}`, inline: false },
-        { name: "Result", value: result.charAt(0).toUpperCase() + result.slice(1), inline: true },
+        { name: "Result", value: flipResult.charAt(0).toUpperCase() + flipResult.slice(1), inline: true },
         { name: won ? "You Won!" : "You Lost", value: won ? `**+${payout} ${currency}**` : `**-${amount} ${currency}**`, inline: false },
         { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
         { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }

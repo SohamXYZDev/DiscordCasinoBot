@@ -74,23 +74,43 @@ module.exports = {
     await new Promise(res => setTimeout(res, 1200));
     // Bot's move and house edge
     const moves = ["rock", "paper", "scissors"];
-    const botMove = moves[Math.floor(Math.random() * 3)];
+    // Fetch probability from config (default 33%)
+    let winProbability = 33;
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.probabilities && typeof config.probabilities.rps === "number") {
+        winProbability = config.probabilities.rps;
+      }
+    }
+    // Determine outcome using probability
     let result;
     let payout;
-    if (choice === botMove) {
-      result = "draw";
+    let botMove;
+    // User win forced by probability
+    if (Math.random() * 100 < winProbability) {
+      // User wins: bot picks losing move
+      if (choice === "rock") botMove = "scissors";
+      else if (choice === "paper") botMove = "rock";
+      else botMove = "paper";
+      result = "win";
+    } else {
+      // User loses or draws: bot picks random (with bias to lose less often)
+      botMove = moves[Math.floor(Math.random() * 3)];
+      if (choice === botMove) result = "draw";
+      else if (
+        (choice === "rock" && botMove === "scissors") ||
+        (choice === "paper" && botMove === "rock") ||
+        (choice === "scissors" && botMove === "paper")
+      ) result = "win";
+      else result = "lose";
+    }
+    if (result === "draw") {
       payout = 0;
       user.balance += amount; // Refund bet on draw
-    } else if (
-      (choice === "rock" && botMove === "scissors") ||
-      (choice === "paper" && botMove === "rock") ||
-      (choice === "scissors" && botMove === "paper")
-    ) {
-      result = "win";
+    } else if (result === "win") {
       payout = Math.floor(amount * HOUSE_EDGE);
       user.balance += amount + payout; // Return bet + profit
     } else {
-      result = "lose";
       payout = 0; // Already deducted at start
     }
     let resultText, color;

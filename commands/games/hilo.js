@@ -76,6 +76,14 @@ module.exports = {
       if (config && config.currency) currency = config.currency;
     }
     const HOUSE_EDGE = 1 - (houseEdge / 100);
+    // Fetch probability from config (default 50%)
+    let winProbability = 50;
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.probabilities && typeof config.probabilities.hilo === "number") {
+        winProbability = config.probabilities.hilo;
+      }
+    }
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Drawing a card...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
@@ -86,10 +94,10 @@ module.exports = {
       second = Math.floor(Math.random() * 9) + 1;
     } while (second === first); // ensure not the same
     let result;
-    if ((guess === "higher" && second > first) || (guess === "lower" && second < first)) {
+    // Determine win using probability
+    const userWins = Math.random() * 100 < winProbability;
+    if (userWins) {
       result = "win";
-    } else if (second === first) {
-      result = "draw";
     } else {
       result = "lose";
     }
@@ -134,7 +142,7 @@ module.exports = {
       game: "hilo",
       amount,
       result,
-      payout: result === "win" ? payout : -amount,
+      payout: userWins ? payout : -amount,
       details: { guess, first, second },
     });
     const embed = new EmbedBuilder()

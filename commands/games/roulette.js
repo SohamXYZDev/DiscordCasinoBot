@@ -100,6 +100,7 @@ module.exports = {
     // House edge: reduce payout by 5%
     let win = resultColor === color;
     let payout;
+    let result = win ? "win" : "lose";
     if (win) {
       payout = Math.floor(amount * PAYOUTS[color] * HOUSE_EDGE);
       user.balance += payout;
@@ -129,7 +130,7 @@ module.exports = {
       userId,
       game: "roulette",
       amount,
-      result: win ? "win" : "lose",
+      result,
       payout: win ? payout : -amount,
       details: { color, resultColor },
     });
