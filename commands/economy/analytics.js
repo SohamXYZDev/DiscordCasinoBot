@@ -54,7 +54,7 @@ module.exports = {
     // Embed
     const embed = new EmbedBuilder()
       .setTitle(`📊 Analytics for ${interaction.user.username}`)
-      .setColor(0x3498db)
+      .setColor(0x41fb2e)
       .setThumbnail(interaction.user.displayAvatarURL())
       .addFields(
         { name: "Total Games Played", value: `${totalGames}`, inline: true },

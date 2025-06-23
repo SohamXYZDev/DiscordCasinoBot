@@ -47,7 +47,7 @@ module.exports = {
     await giver.save();
     await receiverUser.save();
     const embed = new EmbedBuilder()
-      .setColor(0x00ff99)
+      .setColor(0x41fb2e)
       .setTitle("💸 Transfer Complete")
       .setDescription(`You gave **${amount} ${currency}** to <@${receiver.id}>!\nYour new balance: **${giver.balance} ${currency}**`)
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });

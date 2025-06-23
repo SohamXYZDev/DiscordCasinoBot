@@ -18,7 +18,7 @@ module.exports = {
       .limit(10);
     const embed = new EmbedBuilder()
       .setTitle("🏅 XP Leaderboard")
-      .setColor(0x7289da)
+      .setColor(0x41fb2e)
       .setDescription(
         allTop.length
           ? allTop

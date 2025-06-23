@@ -64,7 +64,7 @@ module.exports = {
       .setTitle("DarcoBot Help")
       .setDescription("Select a category below to view its commands.")
       .setImage(HELP_IMAGE)
-      .setColor(0x5865f2);
+      .setColor(0x41fb2e);
     const select = new StringSelectMenuBuilder()
       .setCustomId("help-category-select")
       .setPlaceholder("Select a command category...")
@@ -91,7 +91,7 @@ module.exports = {
           embeds: [
             new EmbedBuilder()
               .setTitle(`Commands: ${CATEGORIES.find(c => c.value === selected)?.label || selected}`)
-              .setColor(0x5865f2)
+              .setColor(0x41fb2e)
               .setDescription(commands.map(cmd => `**${cmd.name}**: ${cmd.desc}`).join("\n"))
           ],
           components: [interaction.message.components[0]],
@@ -103,7 +103,7 @@ module.exports = {
             embeds: [
               new EmbedBuilder()
                 .setTitle(`Commands: ${CATEGORIES.find(c => c.value === selected)?.label || selected}`)
-                .setColor(0x5865f2)
+                .setColor(0x41fb2e)
                 .setDescription(commands.map(cmd => `**${cmd.name}**: ${cmd.desc}`).join("\n"))
             ],
             components: [interaction.message.components[0]],
