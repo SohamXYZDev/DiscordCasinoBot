@@ -199,7 +199,7 @@ module.exports = {
     let embed = new EmbedBuilder()
       .setTitle("🃏 Blackjack")
       .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])}`)
-      .setColor(0x5865f2)
+      .setColor(0x41fb2e)
       .setFields(
         { name: "How to Play", value: "Press **Hit** to draw a card, **Stand** to hold, **Double Down** to double your bet and draw one card, or **Split** if you have a pair.", inline: false },
         { name: "Your Bet", value: `${amount} ${currency}`, inline: false }
@@ -442,10 +442,13 @@ module.exports = {
         if (playerValue > 21) {
           finished = true;
           playerBusted = true;
+          // Acknowledge the interaction before stopping
+          // Already updated above
           collector.stop("bust");
         }
       } else if (i.customId === "stand") {
         finished = true;
+        await i.update({ embeds: [embed], components: [row] }); // Acknowledge the interaction
         collector.stop("stand");
       }
     });

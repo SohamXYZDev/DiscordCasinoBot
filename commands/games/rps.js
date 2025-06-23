@@ -24,6 +24,7 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
+    let choice = interaction.options.getString("choice");
     let user = await User.findOne({ userId });
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
@@ -74,7 +75,6 @@ module.exports = {
     // Bot's move and house edge
     const moves = ["rock", "paper", "scissors"];
     const botMove = moves[Math.floor(Math.random() * 3)];
-    const choice = interaction.options.getString("choice");
     let result;
     let payout;
     if (choice === botMove) {

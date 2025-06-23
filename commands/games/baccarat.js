@@ -22,6 +22,68 @@ function baccaratValue(hand) {
   return value % 10;
 }
 
+// Add a dictionary for custom Discord emojis (same as blackjack)
+const customEmojis = {
+  "A♠": "<:spades1:1379814832873803787>",
+  "2♠": "<:spades2:1379814835516346399>",
+  "3♠": "<:spades3:1379814839052140586>",
+  "4♠": "<:spades4:1379814842415845559>",
+  "5♠": "<:spades5:1379814845012250694>",
+  "6♠": "<:spades6:1379814847306399927>",
+  "7♠": "<:spades7:1379814850099941416>",
+  "8♠": "<:spades8:1379814853002399774>",
+  "9♠": "<:spades9:1379814856458244247>",
+  "10♠": "<:spades10:1379814859507630091>",
+  "J♠": "<:spadesj:1379814862045315133>",
+  "Q♠": "<:spadesq:1379814989388578967>",
+  "K♠": "<:spadesk:1379814864796516412>",
+  "A♥": "<:hearts1:1379815423511363667>",
+  "2♥": "<:hearts2:1379815426061762570>",
+  "3♥": "<:hearts3:1379815428695658536>",
+  "4♥": "<:hearts4:1379815431405178922>",
+  "5♥": "<:hearts5:1379815435196829828>",
+  "6♥": "<:hearts6:1379815438245957723>",
+  "7♥": "<:hearts7:1379815440359886860>",
+  "8♥": "<:hearts8:1379815442763223120>",
+  "9♥": "<:hearts9:1379815445590179931>",
+  "10♥": "<:hearts10:1386688667006795851>",
+  "J♥": "<:diamondsj:1379815414653259856>",
+  "Q♥": "<:heartsq:1386688669565452419>",
+  "K♥": "<:heartsk:1386688498249240596>",
+  "A♦": "<:diamonds1:1379815381077725184>",
+  "2♦": "<:diamonds2:1379815383799828672>",
+  "3♦": "<:diamonds3:1379815386551156877>",
+  "4♦": "<:diamonds4:1379815390313578606>",
+  "5♦": "<:diamonds5:1379815396852502570>",
+  "6♦": "<:diamonds6:1379815400354877581>",
+  "7♦": "<:diamonds7:1379815403068457172>",
+  "8♦": "<:diamonds8:1379815405568393226>",
+  "9♦": "<:diamonds9:1379815408470851654>",
+  "10♦": "<:diamonds10:1379815411855523900>",
+  "J♦": "<:diamondsj:1379815414653259856>",
+  "Q♦": "<:diamondsq:1379815420214775869>",
+  "K♦": "<:diamondsk:1379815417412976670>",
+  "A♣": "<:clubs1:1379814797377278185>",
+  "2♣": "<:clubs2:1379814800514875473>",
+  "3♣": "<:clubs3:1379814802855297094>",
+  "4♣": "<:clubs4:1379814805526810624>",
+  "5♣": "<:clubs5:1379814807926214686>",
+  "6♣": "<:clubs6:1379814810429947934>",
+  "7♣": "<:clubs7:1379814812975890503>",
+  "8♣": "<:clubs8:1379814815266242561>",
+  "9♣": "<:clubs9:1379814818013384806>",
+  "10♣": "<:clubs10:1379814820907450390>",
+  "J♣": "<:clubsj:1379814824799764571>",
+  "Q♣": "<:clubsq:1379814830470332446>",
+  "K♣": "<:clubsk:1379814827039395862>"
+};
+
+// Helper function to render cards using custom emojis
+function renderCard(card) {
+  const cardKey = `${card.rank}${card.suit}`;
+  return customEmojis[cardKey] || `${card.rank}${card.suit}`;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("baccarat")
@@ -131,9 +193,13 @@ module.exports = {
     let payout = 0;
     let profit = 0;
     if (betOn === winner) {
-      if (winner === "player") profit = Math.floor(amount * (1 - houseEdge / 100)); // 1.90x total, 0.90x profit if 5% edge
-      else if (winner === "banker") profit = Math.floor(amount * (1 - (houseEdge + 5) / 100)); // 1.85x total, 0.85x profit if 5% edge
-      else if (winner === "tie") profit = Math.floor(amount * (7.5 - (7.5 * houseEdge / 100))); // 7.5x total, house edge applied
+      if (winner === "player") {
+        profit = Math.floor(amount * (1 - houseEdge / 100)); // 1.90x total, 0.90x profit if 5% edge
+      } else if (winner === "banker") {
+        profit = Math.floor(amount * (1 - (houseEdge + 5) / 100)); // 1.85x total, 0.85x profit if 5% edge
+      } else if (winner === "tie") {
+        profit = Math.floor(amount * (7.5 - (7.5 * houseEdge / 100))); // 7.5x total, house edge applied
+      }
       payout = profit;
       user.balance += amount + profit; // Return bet + profit
     } else if (winner === "tie") {
@@ -176,8 +242,8 @@ module.exports = {
       )
       .setDescription(
         `You bet on: **${betOn.charAt(0).toUpperCase() + betOn.slice(1)}**\n\n` +
-        `Player: ${playerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${playerValue})\n` +
-        `Banker: ${bankerHand.map(c => `${c.rank}${c.suit}`).join(" ")} (Value: ${bankerValue})\n` +
+        `Player: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\n` +
+        `Banker: ${bankerHand.map(renderCard).join(" ")} (Value: ${bankerValue})\n` +
         `Result: **${winner.charAt(0).toUpperCase() + winner.slice(1)}**`
       )
       .addFields(

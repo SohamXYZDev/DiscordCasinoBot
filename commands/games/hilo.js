@@ -24,6 +24,7 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
+    let guess = interaction.options.getString("guess");
     let user = await User.findOne({ userId });
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
@@ -85,7 +86,6 @@ module.exports = {
       second = Math.floor(Math.random() * 9) + 1;
     } while (second === first); // ensure not the same
     let result;
-    const guess = interaction.options.getString("guess");
     if ((guess === "higher" && second > first) || (guess === "lower" && second < first)) {
       result = "win";
     } else if (second === first) {

@@ -27,6 +27,7 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
+    let side = interaction.options.getString("side");
     let user = await User.findOne({ userId });
     if (!user) {
       return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
@@ -82,7 +83,6 @@ module.exports = {
     await new Promise(res => setTimeout(res, 1200));
 
     // Coin flip logic
-    const side = interaction.options.getString("side");
     const result = Math.random() < 0.5 ? "heads" : "tails";
     const won = side === result;
     let payout = 0;

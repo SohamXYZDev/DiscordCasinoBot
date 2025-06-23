@@ -59,6 +59,7 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
+    let difficulty = interaction.options.getString("difficulty");
     // Accept 'all' (case-insensitive) as all-in bet
     let user = await User.findOne({ userId });
     let amount;
@@ -67,7 +68,6 @@ module.exports = {
     } else {
       amount = parseInt(amountInput);
     }
-    const difficulty = interaction.options.getString("difficulty");
     const settings = DIFFICULTY_SETTINGS[difficulty];
     const width = settings.width;
     const height = settings.height;
