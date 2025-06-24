@@ -23,8 +23,8 @@ function generateTower(height, width, dragonsPerRow) {
 function getMultiplierDragon(level, width, dragonsPerRow) {
   // Multiplier increases with each level climbed, more dragons = higher risk = higher reward
   // Example: 1.5x for first, up to ~10x for top, scale with dragons
-  const base = 1.3 + (width * 0.1) + (dragonsPerRow - 1) * 0.2;
-  return parseFloat((base ** level).toFixed(2));
+  const base = 1.5 + (width * 0.1) + (dragonsPerRow - 1) * 0.2;
+  return parseFloat((base ** (level * 0.9)).toFixed(2));
 }
 
 const DIFFICULTY_SETTINGS = {
@@ -59,7 +59,6 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
-    let difficulty = interaction.options.getString("difficulty");
     // Accept 'all' (case-insensitive) as all-in bet
     let user = await User.findOne({ userId });
     let amount;
@@ -68,6 +67,7 @@ module.exports = {
     } else {
       amount = parseInt(amountInput);
     }
+    const difficulty = interaction.options.getString("difficulty");
     const settings = DIFFICULTY_SETTINGS[difficulty];
     const width = settings.width;
     const height = settings.height;
