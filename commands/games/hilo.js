@@ -41,9 +41,9 @@ module.exports = {
     }
     if (user.balance < amount) {
       if (interaction.replied || interaction.deferred) {
-        return interaction.editReply({ content: "❌ You don't have enough coins.", ephemeral: true });
+        return interaction.editReply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
       } else {
-        return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+        return interaction.reply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
       }
     }
     if (user.banned) {

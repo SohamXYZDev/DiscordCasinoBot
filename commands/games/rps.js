@@ -36,7 +36,7 @@ module.exports = {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
     }
     if (user.balance < amount) {
-      return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+      return interaction.reply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
     }
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });

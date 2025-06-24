@@ -3,7 +3,7 @@ const User = require("../../models/User");
 const connectDB = require("../../config/db");
 const GuildConfig = require("../../models/GuildConfig");
 
-const MONTHLY_REWARD = 5000;
+const MONTHLY_REWARD = 5;
 const COOLDOWN_DAYS = 30;
 
 module.exports = {
