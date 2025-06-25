@@ -90,12 +90,43 @@ module.exports = {
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Spinning the roulette...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1800));
-    // Spin the wheel: 0 = green, 1-7 = red, 8-14 = black
-    const spin = Math.floor(Math.random() * 15);
+
+    // --- Probability rigging logic for red/black ---
     let resultColor;
-    if (spin === 0) resultColor = "green";
-    else if (spin <= 7) resultColor = "red";
-    else resultColor = "black";
+    let config = null;
+    let riggedProbability = null;
+    if (interaction.guildId) {
+      config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.probabilities && typeof config.probabilities.roulette === "number") {
+        riggedProbability = config.probabilities.roulette;
+      }
+    }
+    if ((color === "red" || color === "black") && riggedProbability !== null) {
+      // Only rig for red/black bets
+      // green stays at 1/15 (6.67%), rest is split by rigged probability
+      // riggedProbability is the percent chance (0-100) to win if betting red/black
+      // If user bets red: red = riggedProbability%, black = (100 - riggedProbability - greenChance)%, green = 1/15
+      // We'll keep green at 1/15, so red+black = 14/15 (93.33%)
+      const greenChance = 1 / 15;
+      const redOrBlackChance = (1 - greenChance);
+      const winChance = riggedProbability / 100 * redOrBlackChance;
+      const loseChance = redOrBlackChance - winChance;
+      const rand = Math.random();
+      if (rand < greenChance) {
+        resultColor = "green";
+      } else if (rand < greenChance + winChance) {
+        resultColor = color; // rigged win
+      } else {
+        // rigged loss: must be the other color
+        resultColor = color === "red" ? "black" : "red";
+      }
+    } else {
+      // Default: Spin the wheel: 0 = green, 1-7 = red, 8-14 = black
+      const spin = Math.floor(Math.random() * 15);
+      if (spin === 0) resultColor = "green";
+      else if (spin <= 7) resultColor = "red";
+      else resultColor = "black";
+    }
     // House edge: reduce payout by 5%
     let win = resultColor === color;
     let payout;

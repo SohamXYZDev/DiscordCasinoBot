@@ -276,9 +276,10 @@ module.exports = {
     let win = false;
     let payout = 0;
     let playerBusted = false;
+    let dealerFullValue = null; // <-- Fix: declare in outer scope
     if (playerValue === 21 && playerHand.length === 2) {
       // Player has natural blackjack (Ace + 10-value card)
-      const dealerFullValue = handValue(dealerHand);
+      dealerFullValue = handValue(dealerHand);
       if (dealerFullValue === 21 && dealerHand.length === 2) {
         // Both have natural blackjack: push
         win = null;
