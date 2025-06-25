@@ -43,12 +43,14 @@ module.exports = {
         return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
       }
     }
+    // Server currency
+    let currency = "coins";
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.currency) currency = config.currency;
+    }
     if (user.balance < amount) {
-      if (interaction.replied || interaction.deferred) {
-        return interaction.editReply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
-      } else {
-        return interaction.reply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
-      }
+      return interaction.reply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
     }
     if (user.banned) {
       if (interaction.replied || interaction.deferred) {
@@ -70,14 +72,11 @@ module.exports = {
     user.balance -= amount;
     if (user.balance < 0) user.balance = 0;
     await user.save();
-    // Server currency
-    let currency = "coins";
     // Fetch house edge from config (default 5%)
     let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
       if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
-      if (config && config.currency) currency = config.currency;
     }
     const HOUSE_EDGE = 1 - (houseEdge / 100);
     // Check if the game is disabled in the server
