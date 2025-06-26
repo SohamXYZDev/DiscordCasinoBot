@@ -34,7 +34,7 @@ module.exports = {
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
     } else {
-      amount = parseInt(amountInput);
+      amount = parseFloat(amountInput);
     }
     if (!amount || amount <= 0) {
       if (interaction.replied || interaction.deferred) {

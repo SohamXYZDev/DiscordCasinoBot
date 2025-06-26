@@ -24,13 +24,16 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
-    let choice = interaction.options.getString("choice");
     let user = await User.findOne({ userId });
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
     } else {
-      amount = parseInt(amountInput);
+      amount = parseFloat(amountInput);
+    }
+    let choice = interaction.options.getString("choice");
+    if (amount === null || amount === undefined || isNaN(amount)) {
+      return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
     }
     if (!amount || amount <= 0) {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });

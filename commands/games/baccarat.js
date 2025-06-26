@@ -106,15 +106,13 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
-    let user = await User.findOne({ userId });
     let amount;
-    const betOn = interaction.options.getString("beton");
-    // Accept 'all' (case-insensitive) as all-in bet, but only if user.balance > 0
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
     } else {
-      amount = parseInt(amountInput);
+      amount = parseFloat(amountInput);
     }
+    let user = await User.findOne({ userId });
     // If user typed 'all' but has 0 balance, treat as invalid
     if (!amount || amount <= 0) {
       if (interaction.replied || interaction.deferred) {

@@ -18,8 +18,7 @@ module.exports = {
         )
     )
     .addStringOption(option =>
-      option
-        .setName("amount")
+      option.setName("amount")
         .setDescription("How many coins to bet (number or 'all')")
         .setRequired(true)
     ),
@@ -33,11 +32,10 @@ module.exports = {
       return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
     }
     let amount;
-    // Accept 'all' or 'all-in' (case-insensitive) as all-in bet
     if (typeof amountInput === "string" && ["all", "all-in"].includes(amountInput.toLowerCase())) {
       amount = user.balance;
     } else {
-      amount = parseInt(amountInput);
+      amount = parseFloat(amountInput);
     }
     if (!amount || amount <= 0) {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });

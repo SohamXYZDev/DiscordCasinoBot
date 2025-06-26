@@ -59,19 +59,18 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
-    // Accept 'all' (case-insensitive) as all-in bet
-    let user = await User.findOne({ userId });
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
     } else {
-      amount = parseInt(amountInput);
+      amount = parseFloat(amountInput);
     }
     const difficulty = interaction.options.getString("difficulty");
     const settings = DIFFICULTY_SETTINGS[difficulty];
     const width = settings.width;
     const height = settings.height;
     const dragonsPerRow = settings.dragons;
+    let user = await User.findOne({ userId });
     if (!user) {
       return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
     }

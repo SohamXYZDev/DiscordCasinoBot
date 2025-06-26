@@ -26,12 +26,12 @@ const rest = new REST().setToken(process.env.TOKEN);
         );
     console.log("🛰️ Clearing old guild commands...");
     await rest.put(
-      Routes.applicationGuildCommands(process.env.CLIENT_ID, "1374336171341254738"),
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, "1202527903028482048"),
       { body: [] }
     );
     console.log("🛰️ Deploying slash commands...");
     await rest.put(
-      Routes.applicationGuildCommands(process.env.CLIENT_ID, "1374336171341254738"),
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, "1202527903028482048"),
       { body: commands }
     );
     console.log("✅ Slash commands deployed.");
