@@ -13,7 +13,7 @@ module.exports = {
     }
     const embed = new EmbedBuilder()
       .setTitle("🏅 Your Level & XP")
-      .setColor(0xfad02e)
+      .setColor(0x41fb2e)
       .setDescription(`Level: **${user.level}**\nXP: **${user.xp} / ${user.level * 100}**`);
     await interaction.reply({ embeds: [embed], ephemeral: true });
   },

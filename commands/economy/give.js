@@ -9,13 +9,13 @@ module.exports = {
     .addUserOption(option =>
       option.setName("user").setDescription("User to give to").setRequired(true)
     )
-    .addIntegerOption(option =>
+    .addNumberOption(option =>
       option.setName("amount").setDescription("Amount to give").setRequired(true)
     ),
   async execute(interaction) {
     const giverId = interaction.user.id;
     const receiver = interaction.options.getUser("user");
-    const amount = interaction.options.getInteger("amount");
+    const amount = interaction.options.getNumber("amount");
     if (receiver.id === giverId) {
       return interaction.reply({ content: "❌ You can't give currency to yourself!", ephemeral: true });
     }
@@ -42,14 +42,14 @@ module.exports = {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
       if (config && config.currency) currency = config.currency;
     }
-    giver.balance -= amount;
-    receiverUser.balance += amount;
+    giver.balance = Math.round((giver.balance - amount) * 100) / 100;
+    receiverUser.balance = Math.round((receiverUser.balance + amount) * 100) / 100;
     await giver.save();
     await receiverUser.save();
     const embed = new EmbedBuilder()
-      .setColor(0x00ff99)
+      .setColor(0x41fb2e)
       .setTitle("💸 Transfer Complete")
-      .setDescription(`You gave **${amount} ${currency}** to <@${receiver.id}>!\nYour new balance: **${giver.balance} ${currency}**`)
+      .setDescription(`You gave **${amount.toFixed(2)} ${currency}** to <@${receiver.id}>!\nYour new balance: **${giver.balance.toFixed(2)} ${currency}**`)
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
     await interaction.reply({ embeds: [embed] });
   },

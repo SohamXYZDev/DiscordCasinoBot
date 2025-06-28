@@ -25,7 +25,7 @@ module.exports = {
       if (config && config.currency) currency = config.currency;
       const embed = new EmbedBuilder()
         .setTitle("🏆 Leaderboard")
-        .setColor(0xfad02e)
+        .setColor(0x41fb2e)
         .setDescription(
           top.length
             ? top

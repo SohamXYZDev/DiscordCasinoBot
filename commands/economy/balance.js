@@ -18,7 +18,7 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setColor(0x00ff99)
+      .setColor(0x41fb2e)
       .setTitle("Your Balance")
       .setDescription(`
         **${balance} ${currency}**`)

@@ -4,7 +4,7 @@ const GuildConfig = require("../../models/GuildConfig");
 const { checkCooldown } = require("../../utils/cooldown");
 
 // Helper to generate mines board
-function generateBoard(size, mines) {
+function generateBoard(size, mines, firstClickSafe = false) {
   const board = Array(size * size).fill(false);
   let placed = 0;
   while (placed < mines) {
@@ -13,6 +13,11 @@ function generateBoard(size, mines) {
       board[idx] = true;
       placed++;
     }
+  }
+  if (firstClickSafe) {
+    // Ensure the first click is safe with winProbability% chance
+    const safeIdx = Math.floor(Math.random() * board.length);
+    board[safeIdx] = false;
   }
   return board;
 }
@@ -41,18 +46,18 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
-    let user = await User.findOne({ userId });
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
     } else {
-      amount = parseInt(amountInput);
+      amount = parseFloat(amountInput);
     }
+    let user = await User.findOne({ userId });
     if (!amount || amount <= 0) {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
     }
     if (user.balance < amount) {
-      return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+      return interaction.reply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
     }
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
@@ -91,7 +96,7 @@ module.exports = {
     const size = 4;
     const mines = interaction.options.getInteger("mines");
     // Game state
-    let board = generateBoard(size, mines);
+    let board = generateBoard(size, mines, true);
     let revealed = Array(size * size).fill(false);
     let steps = 0;
     let finished = false;
@@ -207,13 +212,14 @@ module.exports = {
     await user.save();
     // Bet history
     const Bet = require("../../models/Bet");
+    let result = win ? "win" : "lose";
     await Bet.create({
       userId,
       game: "mines",
       amount,
-      result: win ? "win" : "lose",
+      result,
       payout: win ? payout : -amount,
-      details: { steps, mines, win, board },
+      details: { steps, mines, board },
     });
     // Final embed
     embed = new EmbedBuilder()

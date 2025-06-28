@@ -23,8 +23,8 @@ function generateTower(height, width, dragonsPerRow) {
 function getMultiplierDragon(level, width, dragonsPerRow) {
   // Multiplier increases with each level climbed, more dragons = higher risk = higher reward
   // Example: 1.5x for first, up to ~10x for top, scale with dragons
-  const base = 1.3 + (width * 0.1) + (dragonsPerRow - 1) * 0.2;
-  return parseFloat((base ** level).toFixed(2));
+  const base = 1.5 + (width * 0.1) + (dragonsPerRow - 1) * 0.2;
+  return parseFloat((base ** (level * 0.9)).toFixed(2));
 }
 
 const DIFFICULTY_SETTINGS = {
@@ -59,19 +59,18 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
-    // Accept 'all' (case-insensitive) as all-in bet
-    let user = await User.findOne({ userId });
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
     } else {
-      amount = parseInt(amountInput);
+      amount = parseFloat(amountInput);
     }
     const difficulty = interaction.options.getString("difficulty");
     const settings = DIFFICULTY_SETTINGS[difficulty];
     const width = settings.width;
     const height = settings.height;
     const dragonsPerRow = settings.dragons;
+    let user = await User.findOne({ userId });
     if (!user) {
       return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
     }
@@ -79,7 +78,7 @@ module.exports = {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
     }
     if (user.balance < amount) {
-      return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+      return interaction.reply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
     }
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });

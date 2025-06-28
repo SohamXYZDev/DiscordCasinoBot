@@ -26,6 +26,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const withdrawCmd = require('./commands/economy/withdraw.js');
     return withdrawCmd.handleComponent(interaction);
   }
+  if (interaction.isStringSelectMenu() && interaction.customId === 'help-category-select') {
+    const helpCmd = require('./commands/help/help.js'); // Adjust path if needed
+    return helpCmd.handleComponent(interaction);
+  }
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);

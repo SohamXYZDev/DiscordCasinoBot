@@ -74,10 +74,10 @@ const customEmojis = {
   "7♥": "<:hearts7:1379815440359886860>",
   "8♥": "<:hearts8:1379815442763223120>",
   "9♥": "<:hearts9:1379815445590179931>",
-  "10♥": "<:hearts10:>",
-  "J♥": "<:heartsj:>",
-  "Q♥": "<:heartsq:>",
-  "K♥": "<:heartsk:>",
+  "10♥": "<:hearts10:1386688667006795851>",
+  "J♥": "<:diamondsj:1379815414653259856>",
+  "Q♥": "<:heartsq:1386688669565452419>",
+  "K♥": "<:heartsk:1386688498249240596>",
   "A♦": "<:diamonds1:1379815381077725184>",
   "2♦": "<:diamonds2:1379815383799828672>",
   "3♦": "<:diamonds3:1379815386551156877>",
@@ -139,12 +139,14 @@ module.exports = {
         return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
       }
     }
-    if (!user || user.balance < amount) {
-      if (interaction.replied || interaction.deferred) {
-        return interaction.editReply({ content: "❌ You don't have enough coins.", ephemeral: true });
-      } else {
-        return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
-      }
+    // Server currency
+    let currency = "coins";
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.currency) currency = config.currency;
+    }
+    if (user.balance < amount) {
+      return interaction.reply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
     }
     if (user.banned) {
       if (interaction.replied || interaction.deferred) {
@@ -166,14 +168,11 @@ module.exports = {
     user.balance -= amount;
     if (user.balance < 0) user.balance = 0;
     await user.save();
-    // Server currency
-    let currency = "coins";
     // Fetch house edge from config (default 5%)
     let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
       if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
-      if (config && config.currency) currency = config.currency;
     }
     const HOUSE_EDGE = 1 - (houseEdge / 100);
     // Check if game is disabled
@@ -185,7 +184,7 @@ module.exports = {
       }
     }
     // Anticipation message with loading gif
-    await interaction.reply({ content: "<a:loading:1376139232090914846> Dealing cards..."});
+    await interaction.reply({ content: "<a:loading:1376139232090914846> Dealing cards..." });
     await new Promise(res => setTimeout(res, 1500));
     // Initial hands (finite deck)
     let deck = createShuffledDeck();
@@ -195,26 +194,41 @@ module.exports = {
     let playerValue = handValue(playerHand);
     let dealerValue = handValue([dealerHand[0]]); // Only show one card
 
+    // Show the value of the dealer's visible card
+    let dealerVisibleValue = handValue([dealerHand[0]]);
+
     // Initialize embed before any use (including insurance logic)
     let embed = new EmbedBuilder()
       .setTitle("🃏 Blackjack")
-      .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])}`)
-      .setColor(0x5865f2)
+      .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`)
+      .setColor(0x41fb2e)
       .setFields(
         { name: "How to Play", value: "Press **Hit** to draw a card, **Stand** to hold, **Double Down** to double your bet and draw one card, or **Split** if you have a pair.", inline: false },
         { name: "Your Bet", value: `${amount} ${currency}`, inline: false }
       )
       .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() });
 
+    // --- Add split state variables here ---
+    let splitActive = false;
+    let splitHands = null;
+    let splitBets = null;
+    let splitResults = null;
+    let splitIndex = 0;
+    let doubleDown = false;
+    // --- End split state vars ---
+
     // Prepare the row variable BEFORE any use (including insurance logic)
-    let canSplit = playerHand[0].rank === playerHand[1].rank;
-    let canDouble = user.balance >= amount && playerHand.length === 2;
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("hit").setLabel("Hit").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("double").setLabel("Double Down").setStyle(ButtonStyle.Danger).setDisabled(!canDouble),
-      new ButtonBuilder().setCustomId("split").setLabel("Split").setStyle(ButtonStyle.Success).setDisabled(!canSplit)
-    );
+    function getActionRow() {
+      let canSplit = playerHand[0].rank === playerHand[1].rank && playerHand.length === 2 && !splitActive;
+      let canDouble = user.balance >= amount && playerHand.length === 2 && !splitActive && !doubleDown;
+      return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("hit").setLabel("Hit").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("stand").setLabel("Stand").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("double").setLabel("Double Down").setStyle(ButtonStyle.Danger).setDisabled(!canDouble),
+        new ButtonBuilder().setCustomId("split").setLabel("Split").setStyle(ButtonStyle.Success).setDisabled(!canSplit)
+      );
+    }
+    let row = getActionRow();
 
     // Insurance logic (stake.com): Offer if dealer shows Ace
     let insuranceOffered = false;
@@ -262,12 +276,12 @@ module.exports = {
     let win = false;
     let payout = 0;
     let playerBusted = false;
-    if (playerValue === 21) {
-      // Player has blackjack
-      // Dealer checks for blackjack
-      const dealerFullValue = handValue(dealerHand);
-      if (dealerFullValue === 21) {
-        // Both have blackjack: push
+    let dealerFullValue = null; // <-- Fix: declare in outer scope
+    if (playerValue === 21 && playerHand.length === 2) {
+      // Player has natural blackjack (Ace + 10-value card)
+      dealerFullValue = handValue(dealerHand);
+      if (dealerFullValue === 21 && dealerHand.length === 2) {
+        // Both have natural blackjack: push
         win = null;
         payout = 0;
         if (insuranceTaken) {
@@ -275,9 +289,9 @@ module.exports = {
           user.balance += insurancePayout * 2; // Insurance pays 2:1
         }
       } else {
-        // Player wins with blackjack, 3:2 payout (house edge applied)
+        // Player wins with natural blackjack, 3:2 payout (house edge applied)
         win = true;
-        payout = Math.floor(amount * 0.5 * HOUSE_EDGE); // Only profit for blackjack win (0.5x, house edge)
+        payout = Math.floor(amount * 1.5 * HOUSE_EDGE); // 3:2 payout, house edge
         if (insuranceTaken) {
           insurancePayout = 0;
         }
@@ -287,8 +301,12 @@ module.exports = {
 
     if (finished) {
       if (win === true) {
-        payout = Math.floor(amount * 0.5 * HOUSE_EDGE); // blackjack profit
-        user.balance += amount + payout; // Return bet + profit
+        // For natural blackjack, payout already includes bet + winnings
+        if (playerValue === 21 && playerHand.length === 2 && !(dealerFullValue === 21 && dealerHand.length === 2)) {
+          user.balance += amount + payout; // Return bet + 3:2 winnings (house edge applied)
+        } else {
+          user.balance += betForResult + Math.floor(betForResult * HOUSE_EDGE); // Standard win
+        }
       } else if (win === null) {
         payout = 0;
         user.balance += amount; // Refund bet on draw
@@ -339,8 +357,8 @@ module.exports = {
           win === true
             ? "https://media.discordapp.net/attachments/1374310263003807778/1384544227194699826/YOU_WIN.png?ex=6853798b&is=6852280b&hm=d31e968dd8213c5bd8a94521ac75aae7d89bf8323c4500417dbd6b5cca3fe2e2&=&format=webp&quality=lossless"
             : win === false
-            ? "https://media.discordapp.net/attachments/1374310263003807778/1384544208207216780/YOU_WIN_1.png?ex=68537986&is=68522806&hm=9e03f6c8972301801a3c69b80e5de72a851bbf5c542b2c8de195ca39bd6e1727&=&format=webp&quality=lossless"
-            : "https://media.discordapp.net/attachments/1374336171341254741/1384893853445918812/YOU_WIN_2.png?ex=68541668&is=6852c4e8&hm=cd5a689a50ab22dc57ee9e5b4c2f97bc2eb54c6515a9bde2052fceac3224e19e&=&format=webp&quality=lossless"
+              ? "https://media.discordapp.net/attachments/1374310263003807778/1384544208207216780/YOU_WIN_1.png?ex=68537986&is=68522806&hm=9e03f6c8972301801a3c69b80e5de72a851bbf5c542b2c8de195ca39bd6e1727&=&format=webp&quality=lossless"
+              : "https://media.discordapp.net/attachments/1374336171341254741/1384893853445918812/YOU_WIN_2.png?ex=68541668&is=6852c4e8&hm=cd5a689a50ab22dc57ee9e5b4c2f97bc2eb54c6515a9bde2052fceac3224e19e&=&format=webp&quality=lossless"
         );
       if (insuranceTaken) {
         finalEmbed.addFields({ name: "Insurance", value: insurancePayout > 0 ? `You won insurance: **+${insurancePayout} ${currency}**` : "Insurance lost.", inline: false });
@@ -349,17 +367,9 @@ module.exports = {
       await interaction.editReply({ embeds: [finalEmbed], components: [], content: null });
       return;
     }
-    // --- Add split state variables here ---
-    let splitActive = false;
-    let splitHands = null;
-    let splitBets = null;
-    let splitResults = null;
-    let splitIndex = 0;
-    // --- End split state vars ---
     await interaction.editReply({ embeds: [embed], components: [row], content: null });
 
     // Await user interaction for hit/stand/double/split
-    let doubleDown = false;
     let collector = interaction.channel.createMessageComponentCollector({
       filter: i => i.user.id === interaction.user.id && ["hit", "stand", "double", "split"].includes(i.customId),
       time: 30000
@@ -380,8 +390,10 @@ module.exports = {
         user.balance = freshUser.balance; // keep in-memory value in sync
         playerHand.push(drawFromDeck());
         playerValue = handValue(playerHand);
-        embed.setDescription(`You doubled down! Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])}`);
-        await i.update({ embeds: [embed], components: [row] });
+        let dealerVisibleValue = handValue([dealerHand[0]]);
+        embed.setDescription(`You doubled down! Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`);
+        row = getActionRow();
+        await i.update({ embeds: [embed], components: [row], content: null });
         finished = true;
         collector.stop("double");
         return;
@@ -413,8 +425,10 @@ module.exports = {
         let hand = splitHands[splitIndex];
         if (i.customId === "hit") {
           hand.push(drawFromDeck());
-          embed.setDescription(`Split! Playing hand ${splitIndex + 1}: ${hand.map(renderCard).join(" ")} (Value: ${handValue(hand)})\nDealer shows: ${renderCard(dealerHand[0])}`);
-          await i.update({ embeds: [embed], components: [row] });
+          let dealerVisibleValue = handValue([dealerHand[0]]);
+          embed.setDescription(`Split! Playing hand ${splitIndex + 1}: ${hand.map(renderCard).join(" ")} (Value: ${handValue(hand)})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`);
+          let splitRow = getActionRow();
+          await i.update({ embeds: [embed], components: [splitRow], content: null });
           if (handValue(hand) > 21) {
             splitResults[splitIndex] = "bust";
             splitIndex++;
@@ -422,6 +436,10 @@ module.exports = {
         } else if (i.customId === "stand") {
           splitResults[splitIndex] = "stand";
           splitIndex++;
+          let dealerVisibleValue = handValue([dealerHand[0]]);
+          embed.setDescription(`Split! Playing hand ${splitIndex}: ${splitHands[splitIndex-1].map(renderCard).join(" ")} (Value: ${handValue(splitHands[splitIndex-1])})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`);
+          let splitRow = getActionRow();
+          await i.update({ embeds: [embed], components: [splitRow], content: null });
         }
         // Move to next hand or finish
         if (splitIndex >= splitHands.length) {
@@ -437,8 +455,10 @@ module.exports = {
       if (i.customId === "hit") {
         playerHand.push(drawFromDeck());
         playerValue = handValue(playerHand);
-        embed.setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])}`);
-        await i.update({ embeds: [embed], components: [row] });
+        let dealerVisibleValue = handValue([dealerHand[0]]);
+        embed.setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`);
+        row = getActionRow();
+        await i.update({ embeds: [embed], components: [row], content: null });
         if (playerValue > 21) {
           finished = true;
           playerBusted = true;
@@ -446,7 +466,33 @@ module.exports = {
         }
       } else if (i.customId === "stand") {
         finished = true;
+        let dealerVisibleValue = handValue([dealerHand[0]]);
+        embed.setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`);
+        row = getActionRow();
+        await i.update({ embeds: [embed], components: [row], content: null });
         collector.stop("stand");
+      }
+      if (i.customId === "double" && !splitActive && playerHand.length === 2 && !doubleDown) {
+        // Fetch latest user balance from DB to prevent exploits
+        const freshUser = await User.findOne({ userId });
+        if (!freshUser || freshUser.balance < amount) {
+          await i.reply({ content: "❌ Not enough balance to double down.", ephemeral: true });
+          return;
+        }
+        doubleDown = true;
+        freshUser.balance -= amount;
+        if (freshUser.balance < 0) freshUser.balance = 0;
+        await freshUser.save();
+        user.balance = freshUser.balance; // keep in-memory value in sync
+        playerHand.push(drawFromDeck());
+        playerValue = handValue(playerHand);
+        let dealerVisibleValue = handValue([dealerHand[0]]);
+        embed.setDescription(`You doubled down! Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${playerValue})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`);
+        row = getActionRow();
+        await i.update({ embeds: [embed], components: [row], content: null });
+        finished = true;
+        collector.stop("double");
+        return;
       }
     });
     await new Promise(res => collector.once("end", res));
@@ -527,8 +573,8 @@ module.exports = {
         win === true
           ? "https://media.discordapp.net/attachments/1374310263003807778/1384544227194699826/YOU_WIN.png?ex=6853798b&is=6852280b&hm=d31e968dd8213c5bd8a94521ac75aae7d89bf8323c4500417dbd6b5cca3fe2e2&=&format=webp&quality=lossless"
           : win === false
-          ? "https://media.discordapp.net/attachments/1374310263003807778/1384544208207216780/YOU_WIN_1.png?ex=68537986&is=68522806&hm=9e03f6c8972301801a3c69b80e5de72a851bbf5c542b2c8de195ca39bd6e1727&=&format=webp&quality=lossless"
-          : "https://media.discordapp.net/attachments/1374336171341254741/1384893853445918812/YOU_WIN_2.png?ex=68541668&is=6852c4e8&hm=cd5a689a50ab22dc57ee9e5b4c2f97bc2eb54c6515a9bde2052fceac3224e19e&=&format=webp&quality=lossless"
+            ? "https://media.discordapp.net/attachments/1374310263003807778/1384544208207216780/YOU_WIN_1.png?ex=68537986&is=68522806&hm=9e03f6c8972301801a3c69b80e5de72a851bbf5c542b2c8de195ca39bd6e1727&=&format=webp&quality=lossless"
+            : "https://media.discordapp.net/attachments/1374336171341254741/1384893853445918812/YOU_WIN_2.png?ex=68541668&is=6852c4e8&hm=cd5a689a50ab22dc57ee9e5b4c2f97bc2eb54c6515a9bde2052fceac3224e19e&=&format=webp&quality=lossless"
       );
     if (doubleDown) {
       finalEmbed.addFields({ name: "Double Down", value: `You doubled your bet to **${betForResult} ${currency}**.`, inline: false });

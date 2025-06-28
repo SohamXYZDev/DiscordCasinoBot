@@ -18,8 +18,7 @@ module.exports = {
         )
     )
     .addStringOption(option =>
-      option
-        .setName("amount")
+      option.setName("amount")
         .setDescription("How many coins to bet (number or 'all')")
         .setRequired(true)
     ),
@@ -27,22 +26,30 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
+    let side = interaction.options.getString("side");
     let user = await User.findOne({ userId });
     if (!user) {
       return interaction.reply({ content: "❌ You don't have an account.", ephemeral: true });
     }
     let amount;
-    // Accept 'all' or 'all-in' (case-insensitive) as all-in bet
     if (typeof amountInput === "string" && ["all", "all-in"].includes(amountInput.toLowerCase())) {
       amount = user.balance;
     } else {
-      amount = parseInt(amountInput);
+      amount = parseFloat(amountInput);
     }
     if (!amount || amount <= 0) {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
     }
+
+    // Server currency
+    let currency = "coins";
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.currency) currency = config.currency;
+    }
+
     if (user.balance < amount) {
-      return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
+      return interaction.reply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
     }
     if (user.banned) {
       return interaction.reply({ content: "🚫 You are banned from using economy commands.", ephemeral: true });
@@ -66,26 +73,34 @@ module.exports = {
     if (user.balance < 0) user.balance = 0;
     await user.save();
 
-    // Fetch server currency
-    let currency = "coins";
     // Fetch house edge from config (default 5%)
     let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
       if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
-      if (config && config.currency) currency = config.currency;
     }
     const HOUSE_EDGE = 1 - (houseEdge / 100);
+
+    // Fetch probability from config (default 50%)
+    let winProbability = 50;
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.probabilities && typeof config.probabilities.coinflip === "number") {
+        winProbability = config.probabilities.coinflip;
+      }
+    }
+    // Determine win using probability
+    const userWins = Math.random() * 100 < winProbability;
+    const flipResult = userWins ? side : (side === "heads" ? "tails" : "heads");
 
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Flipping a coin...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
 
     // Coin flip logic
-    const side = interaction.options.getString("side");
-    const result = Math.random() < 0.5 ? "heads" : "tails";
-    const won = side === result;
+    const won = flipResult === side;
     let payout = 0;
+    let result = won ? "win" : "lose";
     if (won) {
       payout = Math.floor(amount * HOUSE_EDGE);
       user.balance += amount + payout; // Return bet + profit
@@ -122,9 +137,9 @@ module.exports = {
       userId,
       game: "coinflip",
       amount,
-      result: won ? "win" : "lose",
+      result,
       payout: won ? payout : -amount,
-      details: { side, result },
+      details: { side, flipResult },
     });
 
     const embed = new EmbedBuilder()
@@ -132,7 +147,7 @@ module.exports = {
       .setColor(won ? 0x41fb2e : 0xff0000)
       .addFields(
         { name: "Your Bet", value: `${amount} ${currency} on ${side.charAt(0).toUpperCase() + side.slice(1)}`, inline: false },
-        { name: "Result", value: result.charAt(0).toUpperCase() + result.slice(1), inline: true },
+        { name: "Result", value: flipResult.charAt(0).toUpperCase() + flipResult.slice(1), inline: true },
         { name: won ? "You Won!" : "You Lost", value: won ? `**+${payout} ${currency}**` : `**-${amount} ${currency}**`, inline: false },
         { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
         { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }

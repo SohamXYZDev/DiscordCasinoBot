@@ -28,12 +28,13 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let amountInput = interaction.options.getString("amount");
+    let color = interaction.options.getString("color"); // <-- FIX: get color from interaction
     let user = await User.findOne({ userId });
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
     } else {
-      amount = parseInt(amountInput);
+      amount = parseFloat(amountInput);
     }
     if (!amount || amount <= 0) {
       if (interaction.replied || interaction.deferred) {
@@ -42,12 +43,14 @@ module.exports = {
         return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
       }
     }
+    // Server currency
+    let currency = "coins";
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.currency) currency = config.currency;
+    }
     if (user.balance < amount) {
-      if (interaction.replied || interaction.deferred) {
-        return interaction.editReply({ content: "❌ You don't have enough coins.", ephemeral: true });
-      } else {
-        return interaction.reply({ content: "❌ You don't have enough coins.", ephemeral: true });
-      }
+      return interaction.reply({ content: `❌ You don't have enough ${currency}.`, ephemeral: true });
     }
     if (user.banned) {
       if (interaction.replied || interaction.deferred) {
@@ -69,14 +72,11 @@ module.exports = {
     user.balance -= amount;
     if (user.balance < 0) user.balance = 0;
     await user.save();
-    // Server currency
-    let currency = "coins";
     // Fetch house edge from config (default 5%)
     let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
       if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
-      if (config && config.currency) currency = config.currency;
     }
     const HOUSE_EDGE = 1 - (houseEdge / 100);
     // Check if the game is disabled in the server
@@ -90,15 +90,47 @@ module.exports = {
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1376139232090914846> Spinning the roulette...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1800));
-    // Spin the wheel: 0 = green, 1-7 = red, 8-14 = black
-    const spin = Math.floor(Math.random() * 15);
+
+    // --- Probability rigging logic for red/black ---
     let resultColor;
-    if (spin === 0) resultColor = "green";
-    else if (spin <= 7) resultColor = "red";
-    else resultColor = "black";
+    let config = null;
+    let riggedProbability = null;
+    if (interaction.guildId) {
+      config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.probabilities && typeof config.probabilities.roulette === "number") {
+        riggedProbability = config.probabilities.roulette;
+      }
+    }
+    if ((color === "red" || color === "black") && riggedProbability !== null) {
+      // Only rig for red/black bets
+      // green stays at 1/15 (6.67%), rest is split by rigged probability
+      // riggedProbability is the percent chance (0-100) to win if betting red/black
+      // If user bets red: red = riggedProbability%, black = (100 - riggedProbability - greenChance)%, green = 1/15
+      // We'll keep green at 1/15, so red+black = 14/15 (93.33%)
+      const greenChance = 1 / 15;
+      const redOrBlackChance = (1 - greenChance);
+      const winChance = riggedProbability / 100 * redOrBlackChance;
+      const loseChance = redOrBlackChance - winChance;
+      const rand = Math.random();
+      if (rand < greenChance) {
+        resultColor = "green";
+      } else if (rand < greenChance + winChance) {
+        resultColor = color; // rigged win
+      } else {
+        // rigged loss: must be the other color
+        resultColor = color === "red" ? "black" : "red";
+      }
+    } else {
+      // Default: Spin the wheel: 0 = green, 1-7 = red, 8-14 = black
+      const spin = Math.floor(Math.random() * 15);
+      if (spin === 0) resultColor = "green";
+      else if (spin <= 7) resultColor = "red";
+      else resultColor = "black";
+    }
     // House edge: reduce payout by 5%
     let win = resultColor === color;
     let payout;
+    let result = win ? "win" : "lose";
     if (win) {
       payout = Math.floor(amount * PAYOUTS[color] * HOUSE_EDGE);
       user.balance += payout;
@@ -128,7 +160,7 @@ module.exports = {
       userId,
       game: "roulette",
       amount,
-      result: win ? "win" : "lose",
+      result,
       payout: win ? payout : -amount,
       details: { color, resultColor },
     });

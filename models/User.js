@@ -9,6 +9,8 @@ const userSchema = new mongoose.Schema({
   balance: {
     type: Number,
     default: 1000,
+    // Allow decimals for balance
+    set: v => Math.round(v * 100) / 100
   },
   lastDaily: {
     type: Date,

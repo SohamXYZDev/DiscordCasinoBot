@@ -3,7 +3,7 @@ const User = require("../../models/User");
 const connectDB = require("../../config/db");
 const GuildConfig = require("../../models/GuildConfig");
 
-const MONTHLY_REWARD = 5000;
+const MONTHLY_REWARD = 5;
 const COOLDOWN_DAYS = 30;
 
 module.exports = {
@@ -51,7 +51,7 @@ module.exports = {
     return interaction.reply({
       embeds: [
         new EmbedBuilder()
-          .setColor("Blue")
+          .setColor(0x41fb2e)
           .setTitle("🎁 Monthly Reward")
           .setDescription(`You claimed **${MONTHLY_REWARD} ${currency}**!\nYour new balance is **${user.balance} ${currency}**.`)
           .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() })

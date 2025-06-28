@@ -22,6 +22,10 @@ const guildConfigSchema = new mongoose.Schema({
     type: Number,
     default: 5, // percent
   },
+  probabilities: {
+    type: Object,
+    default: {},
+  },
 });
 
 module.exports = mongoose.model("GuildConfig", guildConfigSchema);

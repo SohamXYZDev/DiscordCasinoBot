@@ -44,7 +44,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setTitle("Deposit Ticket")
       .setDescription("Which crypto would you like to use to deposit?")
-      .setColor(0x3498db);
+      .setColor(0x41fb2e);
     const select = new StringSelectMenuBuilder()
       .setCustomId("deposit-crypto-select")
       .setPlaceholder("Select a cryptocurrency...")

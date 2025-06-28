@@ -13,7 +13,7 @@ module.exports = {
     }
     const embed = new EmbedBuilder()
       .setTitle("📝 Your Bet History")
-      .setColor(0x7289da)
+      .setColor(0x41fb2e)
       .setDescription(
         bets.map(bet => {
           const date = bet.timestamp.toLocaleString();
