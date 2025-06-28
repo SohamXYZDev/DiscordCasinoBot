@@ -50,6 +50,14 @@ module.exports = {
   async execute(interaction) {
     const userId = interaction.user.id;
     let user = await User.findOne({ userId });
+    
+    // Get currency early for error messages
+    let currency = "coins";
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.currency) currency = config.currency;
+    }
+    
     let amountInput = interaction.options.getString("amount");
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
@@ -76,7 +84,6 @@ module.exports = {
     if (user.balance < 0) user.balance = 0;
     await user.save();
     // Server currency and probabilities
-    let currency = "coins";
     let winProbability = 0; // Default 0% first click safe
     // Fetch house edge and probability from config
     let houseEdge = 5;
