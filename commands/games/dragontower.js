@@ -111,7 +111,7 @@ module.exports = {
       }
     }
     // Anticipation message
-    await interaction.reply({ content: `<a:loading:1376139232090914846> Entering the Dragon Tower... (Difficulty: ${settings.label})`, ephemeral: false });
+    await interaction.reply({ content: `<a:loading:1388538675465424967> Entering the Dragon Tower... (Difficulty: ${settings.label})`, ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
     // Game state
     let tower = generateTower(height, width, dragonsPerRow);

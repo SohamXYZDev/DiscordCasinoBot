@@ -184,7 +184,7 @@ module.exports = {
       }
     }
     // Anticipation message with loading gif
-    await interaction.reply({ content: "<a:loading:1376139232090914846> Dealing cards..." });
+    await interaction.reply({ content: "<a:loading:1388538675465424967> Dealing cards..." });
     await new Promise(res => setTimeout(res, 1500));
     // Initial hands (finite deck)
     let deck = createShuffledDeck();

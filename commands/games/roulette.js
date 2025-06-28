@@ -88,7 +88,7 @@ module.exports = {
       }
     }
     // Anticipation message
-    await interaction.reply({ content: "<a:loading:1376139232090914846> Spinning the roulette...", ephemeral: false });
+    await interaction.reply({ content: "<a:loading:1388538675465424967> Spinning the roulette...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1800));
 
     // --- Probability rigging logic for red/black ---

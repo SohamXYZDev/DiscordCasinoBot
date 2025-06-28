@@ -94,7 +94,7 @@ module.exports = {
     const flipResult = userWins ? side : (side === "heads" ? "tails" : "heads");
 
     // Anticipation message
-    await interaction.reply({ content: "<a:loading:1376139232090914846> Flipping a coin...", ephemeral: false });
+    await interaction.reply({ content: "<a:loading:1388538675465424967> Flipping a coin...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
 
     // Coin flip logic

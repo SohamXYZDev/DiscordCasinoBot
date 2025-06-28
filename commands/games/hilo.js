@@ -85,7 +85,7 @@ module.exports = {
       }
     }
     // Anticipation message
-    await interaction.reply({ content: "<a:loading:1376139232090914846> Drawing a card...", ephemeral: false });
+    await interaction.reply({ content: "<a:loading:1388538675465424967> Drawing a card...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
     // HiLo logic: pick a number 1-9, show it, then pick next number 1-9
     const first = Math.floor(Math.random() * 9) + 1;

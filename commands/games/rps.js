@@ -73,7 +73,7 @@ module.exports = {
       }
     }
     // Anticipation message
-    await interaction.reply({ content: "<a:loading:1376139232090914846> Choosing rock, paper, or scissors...", ephemeral: false });
+    await interaction.reply({ content: "<a:loading:1388538675465424967> Choosing rock, paper, or scissors...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
     // Bot's move and house edge
     const moves = ["rock", "paper", "scissors"];

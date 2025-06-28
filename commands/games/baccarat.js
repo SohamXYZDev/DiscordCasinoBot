@@ -163,9 +163,9 @@ module.exports = {
     }
     // Anticipation message
     if (interaction.replied || interaction.deferred) {
-      await interaction.editReply({ content: "<a:loading:1376139232090914846> Dealing baccarat cards...", ephemeral: false });
+      await interaction.editReply({ content: "<a:loading:1388538675465424967> Dealing baccarat cards...", ephemeral: false });
     } else {
-      await interaction.reply({ content: "<a:loading:1376139232090914846> Dealing baccarat cards...", ephemeral: false });
+      await interaction.reply({ content: "<a:loading:1388538675465424967> Dealing baccarat cards...", ephemeral: false });
     }
     await new Promise(res => setTimeout(res, 1500));
     // Initial hands
