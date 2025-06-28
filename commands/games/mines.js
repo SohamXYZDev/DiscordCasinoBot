@@ -4,7 +4,7 @@ const GuildConfig = require("../../models/GuildConfig");
 const { checkCooldown } = require("../../utils/cooldown");
 
 // Helper to generate mines board
-function generateBoard(size, mines, firstClickSafe = false) {
+function generateBoard(size, mines, winProbability = 0) {
   const board = Array(size * size).fill(false);
   let placed = 0;
   while (placed < mines) {
@@ -14,10 +14,14 @@ function generateBoard(size, mines, firstClickSafe = false) {
       placed++;
     }
   }
-  if (firstClickSafe) {
-    // Ensure the first click is safe with winProbability% chance
-    const safeIdx = Math.floor(Math.random() * board.length);
-    board[safeIdx] = false;
+  // Apply win probability for first click safety
+  if (winProbability > 0) {
+    const random = Math.random() * 100;
+    if (random < winProbability) {
+      // Ensure at least one safe spot exists
+      const safeIdx = Math.floor(Math.random() * board.length);
+      board[safeIdx] = false;
+    }
   }
   return board;
 }
@@ -45,6 +49,7 @@ module.exports = {
     ),
   async execute(interaction) {
     const userId = interaction.user.id;
+    let user = await User.findOne({ userId });
     let amountInput = interaction.options.getString("amount");
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
@@ -52,7 +57,6 @@ module.exports = {
     } else {
       amount = parseFloat(amountInput);
     }
-    let user = await User.findOne({ userId });
     if (!amount || amount <= 0) {
       return interaction.reply({ content: "🚫 Invalid bet amount.", ephemeral: true });
     }
@@ -71,14 +75,18 @@ module.exports = {
     user.balance -= amount;
     if (user.balance < 0) user.balance = 0;
     await user.save();
-    // Server currency
+    // Server currency and probabilities
     let currency = "coins";
-    // Fetch house edge from config (default 5%)
+    let winProbability = 0; // Default 0% first click safe
+    // Fetch house edge and probability from config
     let houseEdge = 5;
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
       if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
       if (config && config.currency) currency = config.currency;
+      if (config && config.probabilities && typeof config.probabilities.mines === "number") {
+        winProbability = config.probabilities.mines;
+      }
     }
     const HOUSE_EDGE = 1 - (houseEdge / 100);
     // Check if game is disabled
@@ -96,7 +104,7 @@ module.exports = {
     const size = 4;
     const mines = interaction.options.getInteger("mines");
     // Game state
-    let board = generateBoard(size, mines, true);
+    let board = generateBoard(size, mines, winProbability);
     let revealed = Array(size * size).fill(false);
     let steps = 0;
     let finished = false;
