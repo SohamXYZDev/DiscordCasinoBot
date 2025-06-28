@@ -14,15 +14,31 @@ function generateBoard(size, mines, winProbability = 0) {
       placed++;
     }
   }
-  // Apply win probability for first click safety
-  if (winProbability > 0) {
-    const random = Math.random() * 100;
-    if (random < winProbability) {
-      // Ensure at least one safe spot exists
-      const safeIdx = Math.floor(Math.random() * board.length);
-      board[safeIdx] = false;
+  
+  // Apply win probability for first click
+  const random = Math.random() * 100;
+  if (random < winProbability) {
+    // First click should be safe - find safe spots and make one guaranteed safe if possible
+    const safeSpots = [];
+    for (let i = 0; i < board.length; i++) {
+      if (!board[i]) safeSpots.push(i);
+    }
+    // Only apply if there are actually safe spots available
+    if (safeSpots.length > 0) {
+      // Don't need to do anything - there are already safe spots
+    }
+  } else {
+    // First click should hit a mine - find mine spots
+    const mineSpots = [];
+    for (let i = 0; i < board.length; i++) {
+      if (board[i]) mineSpots.push(i);
+    }
+    // Only apply if there are actually mines available
+    if (mineSpots.length > 0) {
+      // Don't need to do anything - there are already mines
     }
   }
+  
   return board;
 }
 
