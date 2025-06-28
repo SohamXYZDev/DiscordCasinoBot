@@ -4,38 +4,47 @@ const GuildConfig = require("../../models/GuildConfig");
 const { checkCooldown } = require("../../utils/cooldown");
 
 // Helper to generate mines board
-function generateBoard(size, mines, winProbability = 0) {
+function generateBoard(size, mines, winProbability = 0, firstClickIdx = null) {
   const board = Array(size * size).fill(false);
-  let placed = 0;
-  while (placed < mines) {
-    const idx = Math.floor(Math.random() * board.length);
-    if (!board[idx]) {
-      board[idx] = true;
-      placed++;
-    }
-  }
   
-  // Apply win probability for first click
-  const random = Math.random() * 100;
-  if (random < winProbability) {
-    // First click should be safe - find safe spots and make one guaranteed safe if possible
-    const safeSpots = [];
-    for (let i = 0; i < board.length; i++) {
-      if (!board[i]) safeSpots.push(i);
-    }
-    // Only apply if there are actually safe spots available
-    if (safeSpots.length > 0) {
-      // Don't need to do anything - there are already safe spots
+  // If this is the first click, apply probability logic
+  if (firstClickIdx !== null) {
+    const random = Math.random() * 100;
+    
+    if (random < winProbability) {
+      // First click should be safe - ensure the clicked tile is safe
+      board[firstClickIdx] = false;
+      // Place mines randomly in other positions
+      let placed = 0;
+      while (placed < mines) {
+        const idx = Math.floor(Math.random() * board.length);
+        if (idx !== firstClickIdx && !board[idx]) {
+          board[idx] = true;
+          placed++;
+        }
+      }
+    } else {
+      // First click should hit a mine - ensure the clicked tile has a mine
+      board[firstClickIdx] = true;
+      // Place remaining mines randomly
+      let placed = 1; // Already placed one at firstClickIdx
+      while (placed < mines) {
+        const idx = Math.floor(Math.random() * board.length);
+        if (!board[idx]) {
+          board[idx] = true;
+          placed++;
+        }
+      }
     }
   } else {
-    // First click should hit a mine - find mine spots
-    const mineSpots = [];
-    for (let i = 0; i < board.length; i++) {
-      if (board[i]) mineSpots.push(i);
-    }
-    // Only apply if there are actually mines available
-    if (mineSpots.length > 0) {
-      // Don't need to do anything - there are already mines
+    // Normal random generation for initial board display
+    let placed = 0;
+    while (placed < mines) {
+      const idx = Math.floor(Math.random() * board.length);
+      if (!board[idx]) {
+        board[idx] = true;
+        placed++;
+      }
     }
   }
   
@@ -127,13 +136,14 @@ module.exports = {
     const size = 4;
     const mines = interaction.options.getInteger("mines");
     // Game state
-    let board = generateBoard(size, mines, winProbability);
+    let board = generateBoard(size, mines); // Initial board without probability
     let revealed = Array(size * size).fill(false);
     let steps = 0;
     let finished = false;
     let win = false;
     let payout = 0;
     let hitMine = false;
+    let isFirstClick = true;
     // Helper to render board as buttons
     function getBoardRows(disabled = false, revealMines = false) {
       const rows = [];
@@ -203,6 +213,13 @@ module.exports = {
       }
       const idx = parseInt(i.customId.split("_")[1]);
       if (revealed[idx]) return i.deferUpdate();
+      
+      // If this is the first click, regenerate board with probability
+      if (isFirstClick) {
+        board = generateBoard(size, mines, winProbability, idx);
+        isFirstClick = false;
+      }
+      
       revealed[idx] = true;
       if (board[idx]) {
         // Hit a mine
