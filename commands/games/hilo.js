@@ -117,13 +117,23 @@ module.exports = {
         // Should win - if currently losing, adjust numbers to make it a win
         if (actualResult === "lose") {
           if (guess === "higher") {
-            // Make second number higher than first
-            second = first + Math.floor(Math.random() * (9 - first)) + 1;
-            if (second > 9) second = 9;
+            // Make second number higher than first (but not equal)
+            if (first < 9) {
+              second = Math.floor(Math.random() * (9 - first)) + first + 1;
+            } else {
+              // If first is 9, we can't make second higher, so change first instead
+              first = Math.floor(Math.random() * 8) + 1; // 1-8
+              second = Math.floor(Math.random() * (9 - first)) + first + 1;
+            }
           } else { // guess === "lower"
-            // Make second number lower than first
-            second = Math.floor(Math.random() * first);
-            if (second < 1) second = 1;
+            // Make second number lower than first (but not equal)
+            if (first > 1) {
+              second = Math.floor(Math.random() * (first - 1)) + 1;
+            } else {
+              // If first is 1, we can't make second lower, so change first instead
+              first = Math.floor(Math.random() * 8) + 2; // 2-9
+              second = Math.floor(Math.random() * (first - 1)) + 1;
+            }
           }
           result = "win";
         }
@@ -131,13 +141,23 @@ module.exports = {
         // Should lose - if currently winning, adjust numbers to make it a loss
         if (actualResult === "win") {
           if (guess === "higher") {
-            // Make second number lower than first
-            second = Math.floor(Math.random() * first);
-            if (second < 1) second = 1;
+            // Make second number lower than first (but not equal)
+            if (first > 1) {
+              second = Math.floor(Math.random() * (first - 1)) + 1;
+            } else {
+              // If first is 1, we can't make second lower, so change first instead
+              first = Math.floor(Math.random() * 8) + 2; // 2-9
+              second = Math.floor(Math.random() * (first - 1)) + 1;
+            }
           } else { // guess === "lower"
-            // Make second number higher than first
-            second = first + Math.floor(Math.random() * (9 - first)) + 1;
-            if (second > 9) second = 9;
+            // Make second number higher than first (but not equal)
+            if (first < 9) {
+              second = Math.floor(Math.random() * (9 - first)) + first + 1;
+            } else {
+              // If first is 9, we can't make second higher, so change first instead
+              first = Math.floor(Math.random() * 8) + 1; // 1-8
+              second = Math.floor(Math.random() * (9 - first)) + first + 1;
+            }
           }
           result = "lose";
         }
