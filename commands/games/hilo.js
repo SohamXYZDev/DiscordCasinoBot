@@ -91,8 +91,8 @@ module.exports = {
     await new Promise(res => setTimeout(res, 1200));
     
     // HiLo logic: pick a number 1-9, show it, then pick next number 1-9
-    const first = Math.floor(Math.random() * 9) + 1;
-    const second = Math.floor(Math.random() * 9) + 1;
+    let first = Math.floor(Math.random() * 9) + 1;
+    let second = Math.floor(Math.random() * 9) + 1;
     
     // Determine actual result based on user's guess
     let actualResult;
@@ -106,16 +106,44 @@ module.exports = {
       actualResult = "lose";
     }
     
-    // Apply probability manipulation if configured
+    // Apply probability manipulation by adjusting the numbers if needed
     let result = actualResult;
-    const shouldWin = Math.random() * 100 < winProbability;
     
-    if (shouldWin && actualResult === "lose") {
-      result = "win"; // Override loss to win
-    } else if (!shouldWin && actualResult === "win") {
-      result = "lose"; // Override win to loss
+    // Only apply probability manipulation if it's not the default 50%
+    if (winProbability !== 50) {
+      const randomValue = Math.random() * 100;
+      
+      if (randomValue < winProbability) {
+        // Should win - if currently losing, adjust numbers to make it a win
+        if (actualResult === "lose") {
+          if (guess === "higher") {
+            // Make second number higher than first
+            second = first + Math.floor(Math.random() * (9 - first)) + 1;
+            if (second > 9) second = 9;
+          } else { // guess === "lower"
+            // Make second number lower than first
+            second = Math.floor(Math.random() * first);
+            if (second < 1) second = 1;
+          }
+          result = "win";
+        }
+      } else {
+        // Should lose - if currently winning, adjust numbers to make it a loss
+        if (actualResult === "win") {
+          if (guess === "higher") {
+            // Make second number lower than first
+            second = Math.floor(Math.random() * first);
+            if (second < 1) second = 1;
+          } else { // guess === "lower"
+            // Make second number higher than first
+            second = first + Math.floor(Math.random() * (9 - first)) + 1;
+            if (second > 9) second = 9;
+          }
+          result = "lose";
+        }
+      }
     }
-    // Keep draws as draws, keep original result for wins/losses that match probability
+    // Keep draws as draws always
     // Calculate payout
     let payout;
     if (result === "draw") {
