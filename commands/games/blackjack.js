@@ -400,7 +400,10 @@ module.exports = {
         collector.stop("double");
         return;
       }
-      if (i.customId === "split" && canSplit && !splitActive) {
+      if (i.customId === "split") {
+        let canSplit = playerHand[0].rank === playerHand[1].rank && playerHand.length === 2 && !splitActive;
+        if (!canSplit) return;
+        
         // Fetch latest user balance from DB to prevent exploits
         const freshUser = await User.findOne({ userId });
         if (!freshUser || freshUser.balance < amount) {
@@ -419,6 +422,7 @@ module.exports = {
         splitResults = [null, null];
         splitIndex = 0;
         embed.setDescription(`Split! Playing hand 1: ${splitHands[0].map(renderCard).join(" ")} (Value: ${handValue(splitHands[0])})\nDealer shows: ${renderCard(dealerHand[0])}`);
+        row = getActionRow();
         await i.update({ embeds: [embed], components: [row] });
         return;
       }
@@ -434,22 +438,33 @@ module.exports = {
           if (handValue(hand) > 21) {
             splitResults[splitIndex] = "bust";
             splitIndex++;
+            
+            // Check if we need to move to next hand or finish all hands
+            if (splitIndex >= splitHands.length) {
+              collector.stop("splitdone");
+            } else {
+              // Update description for next hand
+              let dealerVisibleValue = handValue([dealerHand[0]]);
+              embed.setDescription(`Split! Playing hand ${splitIndex + 1}: ${splitHands[splitIndex].map(renderCard).join(" ")} (Value: ${handValue(splitHands[splitIndex])})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`);
+              let splitRow = getActionRow();
+              await i.update({ embeds: [embed], components: [splitRow], content: null });
+            }
           }
         } else if (i.customId === "stand") {
           splitResults[splitIndex] = "stand";
           splitIndex++;
+        }
+        
+        // Check if we need to move to next hand or finish all hands
+        if (splitIndex >= splitHands.length) {
+          // All hands completed, stop collector
+          collector.stop("splitdone");
+        } else {
+          // Update description for next hand
           let dealerVisibleValue = handValue([dealerHand[0]]);
-          embed.setDescription(`Split! Playing hand ${splitIndex}: ${splitHands[splitIndex-1].map(renderCard).join(" ")} (Value: ${handValue(splitHands[splitIndex-1])})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`);
+          embed.setDescription(`Split! Playing hand ${splitIndex + 1}: ${splitHands[splitIndex].map(renderCard).join(" ")} (Value: ${handValue(splitHands[splitIndex])})\nDealer shows: ${renderCard(dealerHand[0])} (Value: ${dealerVisibleValue})`);
           let splitRow = getActionRow();
           await i.update({ embeds: [embed], components: [splitRow], content: null });
-        }
-        // Move to next hand or finish
-        if (splitIndex >= splitHands.length) {
-          collector.stop("splitdone");
-        } else if (splitResults[splitIndex]) {
-          // If next hand already finished (e.g. both bust), skip
-          splitIndex++;
-          if (splitIndex >= splitHands.length) collector.stop("splitdone");
         }
         return;
       }
@@ -506,20 +521,114 @@ module.exports = {
       new ButtonBuilder().setCustomId("split").setLabel("Split").setStyle(ButtonStyle.Success).setDisabled(true)
     );
 
-    // Dealer's turn
+    // Dealer's turn - play normally for both regular and split games
     dealerValue = handValue(dealerHand);
-    while ((!playerBusted && !splitActive) && dealerValue < 17) {
+    while (dealerValue < 17) {
       dealerHand.push(drawFromDeck());
       dealerValue = handValue(dealerHand);
     }
     // Result logic (after dealer's turn)
+    if (splitActive) {
+      // Handle split hands results
+      let totalWinnings = 0;
+      let totalLosses = 0;
+      let hand1Result, hand2Result;
+      
+      // Calculate result for each hand
+      for (let i = 0; i < splitHands.length; i++) {
+        let handVal = handValue(splitHands[i]);
+        let bet = splitBets[i];
+        
+        if (handVal > 21) {
+          // Hand busted - loss
+          totalLosses += bet;
+          if (i === 0) hand1Result = "bust";
+          else hand2Result = "bust";
+        } else if (dealerValue > 21 || handVal > dealerValue) {
+          // Hand wins
+          let winnings = Math.floor(bet * HOUSE_EDGE);
+          user.balance += bet + winnings; // Return bet + winnings
+          totalWinnings += winnings;
+          if (i === 0) hand1Result = "win";
+          else hand2Result = "win";
+        } else if (handVal === dealerValue) {
+          // Push - refund bet
+          user.balance += bet;
+          if (i === 0) hand1Result = "draw";
+          else hand2Result = "draw";
+        } else {
+          // Hand loses
+          totalLosses += bet;
+          if (i === 0) hand1Result = "lose";
+          else hand2Result = "lose";
+        }
+      }
+      
+      // XP for split hands
+      let xpGain = 10;
+      if (totalWinnings > 0) user.xp += xpGain * 2;
+      else user.xp += xpGain;
+      
+      // Level up logic
+      const nextLevelXp = user.level * 100;
+      if (user.xp >= nextLevelXp) {
+        user.level += 1;
+        user.xp = user.xp - nextLevelXp;
+      }
+      
+      await user.save();
+      
+      // Bet history for split
+      const Bet = require("../../models/Bet");
+      await Bet.create({
+        userId,
+        game: "blackjack",
+        amount: amount * 2, // Total amount bet (both hands)
+        result: totalWinnings > totalLosses ? "win" : totalWinnings === totalLosses ? "draw" : "lose",
+        payout: totalWinnings - totalLosses,
+        details: { splitHands, dealerHand, hand1Result, hand2Result },
+      });
+      
+      // Create split results embed
+      let netResult = totalWinnings - totalLosses;
+      let resultField = netResult > 0 ? `**+${netResult} ${currency}**` : 
+                       netResult < 0 ? `**${netResult} ${currency}**` : "No change";
+      
+      let finalEmbed = new EmbedBuilder()
+        .setTitle("🃏 Blackjack - Split Results")
+        .setColor(netResult > 0 ? 0x41fb2e : netResult < 0 ? 0xff0000 : 0xffff00)
+        .setDescription(
+          `**Hand 1:** ${splitHands[0].map(renderCard).join(" ")} (Value: ${handValue(splitHands[0])}) - ${hand1Result}\n` +
+          `**Hand 2:** ${splitHands[1].map(renderCard).join(" ")} (Value: ${handValue(splitHands[1])}) - ${hand2Result}\n` +
+          `**Dealer:** ${dealerHand.map(renderCard).join(" ")} (Value: ${dealerValue})`
+        )
+        .addFields(
+          { name: "Net Result", value: resultField, inline: false },
+          { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
+          { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
+        )
+        .setFooter({ text: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() })
+        .setImage(
+          netResult > 0
+            ? "https://media.discordapp.net/attachments/1374310263003807778/1384544227194699826/YOU_WIN.png?ex=6853798b&is=6852280b&hm=d31e968dd8213c5bd8a94521ac75aae7d89bf8323c4500417dbd6b5cca3fe2e2&=&format=webp&quality=lossless"
+            : netResult < 0
+              ? "https://media.discordapp.net/attachments/1374310263003807778/1384544208207216780/YOU_WIN_1.png?ex=68537986&is=68522806&hm=9e03f6c8972301801a3c69b80e5de72a851bbf5c542b2c8de195ca39bd6e1727&=&format=webp&quality=lossless"
+              : "https://media.discordapp.net/attachments/1374310263003807778/1388826613483044924/YOU_WIN_2.png?ex=68626513&is=68611393&hm=33806f5a224060dea92fe4e17fdbd919a5ece77882aa5d24ced8826f1a99785f&=&format=webp&quality=lossless"
+        );
+      
+      await interaction.editReply({ embeds: [finalEmbed], components: [disabledRow], content: null });
+      return;
+    }
+    
+    // Regular (non-split) game result logic
     let betForResult = doubleDown ? amount * 2 : amount;
     if (playerValue > 21) {
       win = false;
       payout = -betForResult;
     } else if (dealerValue > 21 || playerValue > dealerValue) {
       win = true;
-      payout = betForResult + Math.floor(betForResult * HOUSE_EDGE); // Return original bet + profit
+      payout = Math.floor(betForResult * HOUSE_EDGE); // Just the winnings
+      user.balance += betForResult + payout; // Return bet + winnings
     } else if (playerValue === dealerValue) {
       win = null;
       payout = 0;
@@ -528,8 +637,7 @@ module.exports = {
       win = false;
       payout = -betForResult;
     }
-    if (win === true) user.balance += betForResult + Math.floor(betForResult * HOUSE_EDGE);
-    // Do NOT deduct again on loss, already deducted at start
+    
     if (user.balance < 0) user.balance = 0;
     // XP
     let xpGain = 10;
@@ -554,10 +662,10 @@ module.exports = {
       payout: payout,
       details: { playerHand, dealerHand },
     });
-    // Final embed
+    // Final embed for regular games
     let resultField;
     if (win === true) resultField = `**+${payout} ${currency}**`;
-    else if (win === false) resultField = `**-${amount} ${currency}**`;
+    else if (win === false) resultField = `**-${Math.abs(payout)} ${currency}**`;
     else resultField = "No change (draw)";
     let finalEmbed = new EmbedBuilder()
       .setTitle("🃏 Blackjack")
