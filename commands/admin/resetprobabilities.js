@@ -15,8 +15,13 @@ module.exports = {
     if (!config) {
       return interaction.reply({ content: "No server config found. Nothing to reset.", ephemeral: true });
     }
-    config.probabilities = {};
+    config.probabilities = {
+      "coinflip": 50,     // Perfect 50/50
+      "hilo": 50,         // Perfect 50/50 for higher/lower
+      "mines": 50,        // 50% chance first click is safe (balanced)
+      "rps": 33           // Rock Paper Scissors: 1/3 chance
+    };
     await config.save();
-    return interaction.reply({ content: `✅ All game win probabilities have been reset to default.`, ephemeral: true });
+    return interaction.reply({ content: `✅ Probabilities reset to natural odds for games that support it (coinflip, hilo, mines, rps).`, ephemeral: true });
   },
 };
