@@ -26,6 +26,14 @@ module.exports = {
     let amountInput = interaction.options.getString("amount");
     let guess = interaction.options.getString("guess");
     let user = await User.findOne({ userId });
+    
+    // Get currency early for error messages
+    let currency = "coins";
+    if (interaction.guildId) {
+      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
+      if (config && config.currency) currency = config.currency;
+    }
+    
     let amount;
     if (typeof amountInput === "string" && amountInput.toLowerCase() === "all") {
       amount = user.balance;
@@ -66,42 +74,49 @@ module.exports = {
     user.balance -= amount;
     if (user.balance < 0) user.balance = 0;
     await user.save();
-    // Server currency
-    let currency = "coins";
-    // Fetch house edge from config (default 5%)
+    // Fetch house edge and probability from config
     let houseEdge = 5;
+    let winProbability = 50; // Default 50%
     if (interaction.guildId) {
       const config = await GuildConfig.findOne({ guildId: interaction.guildId });
       if (config && typeof config.houseEdge === "number") houseEdge = config.houseEdge;
       if (config && config.currency) currency = config.currency;
-    }
-    const HOUSE_EDGE = 1 - (houseEdge / 100);
-    // Fetch probability from config (default 50%)
-    let winProbability = 50;
-    if (interaction.guildId) {
-      const config = await GuildConfig.findOne({ guildId: interaction.guildId });
       if (config && config.probabilities && typeof config.probabilities.hilo === "number") {
         winProbability = config.probabilities.hilo;
       }
     }
+    const HOUSE_EDGE = 1 - (houseEdge / 100);
     // Anticipation message
     await interaction.reply({ content: "<a:loading:1388538675465424967> Drawing a card...", ephemeral: false });
     await new Promise(res => setTimeout(res, 1200));
+    
     // HiLo logic: pick a number 1-9, show it, then pick next number 1-9
     const first = Math.floor(Math.random() * 9) + 1;
-    let second;
-    do {
-      second = Math.floor(Math.random() * 9) + 1;
-    } while (second === first); // ensure not the same
-    let result;
-    // Determine win using probability
-    const userWins = Math.random() * 100 < winProbability;
-    if (userWins) {
-      result = "win";
+    const second = Math.floor(Math.random() * 9) + 1;
+    
+    // Determine actual result based on user's guess
+    let actualResult;
+    if (second > first && guess === "higher") {
+      actualResult = "win";
+    } else if (second < first && guess === "lower") {
+      actualResult = "win";
+    } else if (second === first) {
+      actualResult = "draw";
     } else {
-      result = "lose";
+      actualResult = "lose";
     }
-    // House edge: 5% reduction in payout
+    
+    // Apply probability manipulation if configured
+    let result = actualResult;
+    const shouldWin = Math.random() * 100 < winProbability;
+    
+    if (shouldWin && actualResult === "lose") {
+      result = "win"; // Override loss to win
+    } else if (!shouldWin && actualResult === "win") {
+      result = "lose"; // Override win to loss
+    }
+    // Keep draws as draws, keep original result for wins/losses that match probability
+    // Calculate payout
     let payout;
     if (result === "draw") {
       payout = 0;
@@ -112,20 +127,18 @@ module.exports = {
     } else {
       payout = 0; // Already deducted at start
     }
-    let resultText, color;
+    
+    let resultText;
     let xpGain = 5;
     if (result === "win") {
       user.xp += xpGain * 2;
       resultText = `You win! You gained **+${payout} ${currency}**.`;
-      color = 0x00ff99;
     } else if (result === "draw") {
       user.xp += xpGain;
       resultText = `It's a draw! You get your bet back: **+${amount} ${currency}**.`;
-      color = 0xffff00;
     } else {
       user.xp += xpGain;
       resultText = `You lose! You lost **-${amount} ${currency}**.`;
-      color = 0xff0000;
     }
     // Level up logic
     const nextLevelXp = user.level * 100;
@@ -142,7 +155,7 @@ module.exports = {
       game: "hilo",
       amount,
       result,
-      payout: userWins ? payout : -amount,
+      payout: result === "win" ? payout : result === "draw" ? 0 : -amount,
       details: { guess, first, second },
     });
     const embed = new EmbedBuilder()
