@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema({
   },
   balance: {
     type: Number,
-    default: 1000,
+    default: 0,
     // Allow decimals for balance
     set: v => Math.round(v * 100) / 100
   },
