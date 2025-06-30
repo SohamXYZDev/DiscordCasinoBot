@@ -15,9 +15,10 @@ function drawCard() {
 function handValue(hand) {
   let value = 0;
   let aces = 0;
+  
+  // First, count all non-Ace cards
   for (const card of hand) {
     if (card.rank === "A") {
-      value += 11;
       aces++;
     } else if (["K", "Q", "J"].includes(card.rank)) {
       value += 10;
@@ -25,10 +26,17 @@ function handValue(hand) {
       value += parseInt(card.rank);
     }
   }
-  while (value > 21 && aces > 0) {
-    value -= 10;
-    aces--;
+  
+  // Now handle Aces - try to use as many as 11 as possible without busting
+  if (aces > 0) {
+    // If we can use one Ace as 11 without busting, do it
+    if (value + 11 + (aces - 1) <= 21) {
+      value += 11 + (aces - 1); // One Ace as 11, rest as 1
+    } else {
+      value += aces; // All Aces as 1
+    }
   }
+  
   return value;
 }
 
