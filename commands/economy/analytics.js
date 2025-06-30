@@ -1,21 +1,46 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const Bet = require("../../models/Bet");
 const User = require("../../models/User");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("analytics")
-    .setDescription("View your game stats, win/loss ratio, and more!"),
+    .setDescription("View your game stats, win/loss ratio, and more!")
+    .addUserOption(option =>
+      option.setName("user")
+        .setDescription("View another user's stats (Admin only)")
+        .setRequired(false)
+    ),
   async execute(interaction) {
-    const userId = interaction.user.id;
+    const targetUser = interaction.options.getUser("user");
+    const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator);
+    
+    // If a user is specified but requester is not admin, deny access
+    if (targetUser && !isAdmin) {
+      return interaction.reply({ 
+        content: "❌ You need Administrator permissions to view other users' stats.", 
+        ephemeral: true 
+      });
+    }
+    
+    // Determine which user's stats to show
+    const userToAnalyze = targetUser || interaction.user;
+    const userId = userToAnalyze.id;
+    
     const user = await User.findOne({ userId });
     if (!user) {
-      return interaction.reply({ content: "❌ User not found.", ephemeral: true });
+      return interaction.reply({ 
+        content: `❌ ${targetUser ? "That user" : "You"} ${targetUser ? "is" : "are"} not found in the database.`, 
+        ephemeral: true 
+      });
     }
     // Fetch all bets for this user
     const bets = await Bet.find({ userId });
     if (!bets.length) {
-      return interaction.reply({ content: "You haven't played any games yet!", ephemeral: true });
+      return interaction.reply({ 
+        content: `${targetUser ? userToAnalyze.username : "You"} ${targetUser ? "hasn't" : "haven't"} played any games yet!`, 
+        ephemeral: true 
+      });
     }
     // Aggregate stats
     let totalWins = 0, totalLosses = 0, totalDraws = 0, totalWagered = 0;
@@ -53,9 +78,9 @@ module.exports = {
     ).join("\n\n");
     // Embed
     const embed = new EmbedBuilder()
-      .setTitle(`📊 Analytics for ${interaction.user.username}`)
+      .setTitle(`📊 Analytics for ${userToAnalyze.username}`)
       .setColor(0x41fb2e)
-      .setThumbnail(interaction.user.displayAvatarURL())
+      .setThumbnail(userToAnalyze.displayAvatarURL())
       .addFields(
         { name: "Total Games Played", value: `${totalGames}`, inline: true },
         { name: "Wins", value: `${totalWins}`, inline: true },
@@ -65,7 +90,10 @@ module.exports = {
         { name: "Most Played", value: mostPlayed || "None", inline: false },
         { name: "Game Stats", value: perGameStats || "No data", inline: false }
       )
-      .setFooter({ text: `Requested by ${interaction.user.tag}` });
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+      .setFooter({ text: `Requested by ${interaction.user.tag}${targetUser ? ` | Viewing ${userToAnalyze.tag}` : ""}` });
+    
+    // Only make it ephemeral if viewing own stats or if admin is viewing someone else's
+    const isEphemeral = !targetUser || isAdmin;
+    await interaction.reply({ embeds: [embed], ephemeral: isEphemeral });
   },
 };
