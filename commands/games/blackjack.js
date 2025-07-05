@@ -281,16 +281,17 @@ module.exports = {
       // Remove insurance row for next UI
       embed.data.fields = embed.data.fields.filter(f => f.name !== "Insurance");
     }
-    // Check for auto-win (blackjack)
+    // Check for auto-win/auto-lose scenarios (blackjacks)
     let finished = false;
     let win = false;
     let payout = 0;
     let playerBusted = false;
-    let dealerFullValue = null; // <-- Fix: declare in outer scope
-    if (playerValue === 21 && playerHand.length === 2) {
-      // Player has natural blackjack (Ace + 10-value card)
-      dealerFullValue = handValue(dealerHand);
-      if (dealerFullValue === 21 && dealerHand.length === 2) {
+    let dealerFullValue = handValue(dealerHand); // Check dealer's full hand
+    let playerHasBlackjack = playerValue === 21 && playerHand.length === 2;
+    let dealerHasBlackjack = dealerFullValue === 21 && dealerHand.length === 2;
+    
+    if (playerHasBlackjack || dealerHasBlackjack) {
+      if (playerHasBlackjack && dealerHasBlackjack) {
         // Both have natural blackjack: push
         win = null;
         payout = 0;
@@ -298,12 +299,20 @@ module.exports = {
           insurancePayout = amount;
           user.balance += insurancePayout * 2; // Insurance pays 2:1
         }
-      } else {
+      } else if (playerHasBlackjack && !dealerHasBlackjack) {
         // Player wins with natural blackjack, 3:2 payout (house edge applied)
         win = true;
         payout = Math.floor(amount * 1.5 * HOUSE_EDGE); // 3:2 payout, house edge
         if (insuranceTaken) {
-          insurancePayout = 0;
+          insurancePayout = 0; // Insurance loses
+        }
+      } else if (!playerHasBlackjack && dealerHasBlackjack) {
+        // Dealer has blackjack, player doesn't: instant loss
+        win = false;
+        payout = 0; // Already deducted at start
+        if (insuranceTaken) {
+          insurancePayout = amount;
+          user.balance += insurancePayout * 2; // Insurance pays 2:1
         }
       }
       finished = true;
@@ -358,7 +367,7 @@ module.exports = {
         )
         .setDescription(`Your hand: ${playerHand.map(renderCard).join(" ")} (Value: ${handValue(playerHand)})\nDealer's hand: ${dealerHand.map(renderCard).join(" ")} (Value: ${handValue(dealerHand)})`)
         .addFields(
-          { name: win === true ? "Blackjack! You Win!" : win === false ? "Both Blackjack! Draw" : "Draw", value: resultField, inline: false },
+          { name: win === true ? "Blackjack! You Win!" : win === false ? "Dealer Blackjack! You Lose!" : "Both Blackjack! Draw", value: resultField, inline: false },
           { name: "Your Balance", value: `${user.balance} ${currency}`, inline: false },
           { name: "XP", value: `${user.xp} / ${user.level * 100} (Level ${user.level})`, inline: false }
         )
