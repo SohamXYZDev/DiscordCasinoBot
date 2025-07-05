@@ -4,7 +4,7 @@ const connectDB = require("./config/db");
 const GuildConfig = require("./models/GuildConfig");
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessages],
 });
 
 client.commands = new Collection();
@@ -53,6 +53,38 @@ client.on(Events.InteractionCreate, async (interaction) => {
   } catch (err) {
     console.error(err);
     await interaction.reply({ content: "❌ There was an error executing that command.", ephemeral: true });
+  }
+});
+
+// Handle prefix commands (admin commands only)
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+  if (!message.content.startsWith('.')) return;
+  
+  const args = message.content.slice(1).trim().split(/ +/);
+  const commandName = args.shift().toLowerCase();
+  
+  // Check if it's an admin command
+  const adminCommands = [
+    'banuser', 'disablegame', 'enablegame', 'resetprobabilities', 
+    'resetuser', 'setbalance', 'setcurrency', 'setedge', 'setlogs', 'setprobability'
+  ];
+  
+  if (!adminCommands.includes(commandName)) return;
+  
+  // Check admin permissions
+  if (!message.member || !message.member.permissions.has('Administrator')) {
+    return message.reply('❌ You need Administrator permission to use admin commands.');
+  }
+  
+  try {
+    const command = require(`./commands/admin/${commandName}.js`);
+    if (command && command.executePrefix) {
+      await command.executePrefix(message, args);
+    }
+  } catch (error) {
+    console.error(`Error executing prefix command ${commandName}:`, error);
+    message.reply('❌ There was an error executing that command.');
   }
 });
 

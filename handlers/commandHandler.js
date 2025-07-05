@@ -6,6 +6,13 @@ module.exports = (client) => {
 
   for (const folder of fs.readdirSync(commandsPath)) {
     const folderPath = path.join(commandsPath, folder);
+    
+    // Skip admin folder since admin commands are prefix-only
+    if (folder === 'admin') {
+      console.log(`[INFO] Skipping admin commands - they are prefix-only`);
+      continue;
+    }
+    
     for (const file of fs.readdirSync(folderPath)) {
       const command = require(path.join(folderPath, file));
       if ("data" in command && "execute" in command) {

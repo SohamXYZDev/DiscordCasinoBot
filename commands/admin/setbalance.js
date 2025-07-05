@@ -1,30 +1,33 @@
-const { SlashCommandBuilder } = require("discord.js");
 const User = require("../../models/User");
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("setbalance")
-    .setDescription("Set a user's balance.")
-    .addUserOption(option =>
-      option.setName("user").setDescription("User to set").setRequired(true)
-    )
-    .addNumberOption(option =>
-      option.setName("amount").setDescription("New balance").setRequired(true)
-    ),
-  async execute(interaction) {
-    if (!interaction.memberPermissions || !interaction.memberPermissions.has("Administrator")) {
-      return interaction.reply({ content: "❌ You need Administrator permission.", ephemeral: true });
+  async executePrefix(message, args) {
+    if (args.length < 2) {
+      return message.reply('❌ Please specify a user and amount. Usage: `.setbalance @user <amount>`');
     }
-    const user = interaction.options.getUser("user");
-    const amount = interaction.options.getNumber("amount");
-    if (amount < 0) {
-      return interaction.reply({ content: "❌ Balance cannot be negative.", ephemeral: true });
+    
+    const userMention = args[0];
+    const userId = userMention.replace(/[<@!>]/g, '');
+    const amount = parseFloat(args[1]);
+    
+    if (!userId || isNaN(userId)) {
+      return message.reply('❌ Please provide a valid user mention. Usage: `.setbalance @user <amount>`');
     }
-    const dbUser = await User.findOneAndUpdate(
-      { userId: user.id },
-      { $set: { balance: Math.round(amount * 100) / 100 } },
-      { new: true, upsert: true }
-    );
-    await interaction.reply({ content: `✅ Set <@${user.id}>'s balance to ${dbUser.balance.toFixed(2)}.` });
+    
+    if (isNaN(amount) || amount < 0) {
+      return message.reply('❌ Please provide a valid non-negative amount. Usage: `.setbalance @user <amount>`');
+    }
+    
+    try {
+      const user = await message.client.users.fetch(userId);
+      const dbUser = await User.findOneAndUpdate(
+        { userId: user.id },
+        { $set: { balance: Math.round(amount * 100) / 100 } },
+        { new: true, upsert: true }
+      );
+      await message.reply(`✅ Set <@${user.id}>'s balance to ${dbUser.balance.toFixed(2)}.`);
+    } catch (error) {
+      await message.reply('❌ Could not find that user.');
+    }
   },
 };
